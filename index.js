@@ -568,3 +568,8 @@ client.login(process.env.DISCORD_TOKEN);
 process.on('unhandledRejection', (error) => {
   console.error('Unhandled promise rejection:', error);
 });
+const http = require('http');
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Keo Bot is running 24/7!');
+}).listen(process.env.PORT || 8000);
