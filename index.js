@@ -115,7 +115,18 @@ client.once('clientReady', () => {
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.content.startsWith('!')) return;
+  if (message.author.bot || !message.content.toLowerCase().startsWith('k')) return;
+
+  const args = message.content.slice(1).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // Command အစစ်ဟုတ်/မဟုတ် အရင်စစ်ခြင်း (ရိုးရိုးစကားပြောရင်း k ပါရင် Cooldown မတက်စေရန်)
+  const validCommands = [
+    'cash', 'bal', 'daily', 'work', 'give', 'top', 'lb',
+    'hunt', 'h', 'zoo', 'z', 'sellall', 'cf', 'coinflip',
+    'slots', 'shop', 'buy', 'help', 'battle', 'b', 'profile', 'lvl', 'level'
+  ];
+  if (!validCommands.includes(command)) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
@@ -448,11 +459,11 @@ client.on('messageCreate', async (message) => {
         .setColor('#5865F2')
         .setTitle('📜 Bot အသုံးပြုနည်း Command လမ်းညွှန်')
         .addFields(
-          { name: '💰 Economy (စီးပွားရေး)', value: '`!cash`, `!daily`, `!work`, `!shop`, `!buy <id>`, `!give @user <amount>`, `!top`' },
-          { name: '🏹 Hunting (အမဲလိုက်ခြင်း)', value: '`!hunt` (`!h`), `!zoo` (`!z`), `!sellall`' },
-          { name: '🎲 Gambling (ကံစမ်းမဲ)', value: '`!cf <amount> [heads/tails]`, `!slots <amount>`' },
-          { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`!battle` (`!b`)' },
-          { name: '📈 Level & EXP', value: '`!profile`, `!lvl`, `!level`' }
+          { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kgive @user <amount>`, `Ktop`' },
+          { name: '🏹 Hunting (အမဲလိုက်ခြင်း)', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksellall`' },
+          { name: '🎲 Gambling (ကံစမ်းမဲ)', value: '`Kcf <amount> [heads/tails]`, `Kslots <amount>`' },
+          { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`)' },
+          { name: '📈 Level & EXP', value: '`Kprofile`, `Klvl`, `Klevel`' }
         )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 
@@ -463,7 +474,7 @@ client.on('messageCreate', async (message) => {
     if (command === 'battle' || command === 'b') {
       const entries = Object.entries(user.zoo || {});
       if (entries.length === 0) {
-        return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `!hunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+        return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
       }
 
       let myTeam = [];
@@ -495,7 +506,7 @@ client.on('messageCreate', async (message) => {
 
       const battleEmbed = new EmbedBuilder()
         .setColor('#E67E22')
-        .setTitle(`⚔️ ${message.author.username} (Lv.${user.level}) ၏ တိရစ္ဆာန်တိုက်ပွဲ!`)
+        .setTitle(`⚔️ ${message.author.username} (Lv.${user.level}) ၏ တိရစ္ဆာန်တိုက်ပွဲ`)
         .addFields(
           { name: '🛡️ သင့်အဖွဲ့ (Your Team)', value: myTeamText, inline: true },
           { name: '👹 ရန်သူ့အဖွဲ့ (Wild Team)', value: enemyTeamText, inline: true }
