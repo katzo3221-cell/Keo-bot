@@ -159,7 +159,7 @@ client.on('messageCreate', async (message) => {
       return message.reply({ embeds: [cashEmbed] });
     }
 
-    // ၂။ နေ့စဉ် အခမဲ့ငွေ ထုတ်ယူခြင်း (!daily)
+   // ၂။ နေ့စဉ် အခမဲ့ငွေ ထုတ်ယူခြင်း (Kdaily) - Level & EXP အလိုက် တိုးမည် (Max: 10,000)
     if (command === 'daily') {
       const now = Date.now();
       const cooldown = 24 * 60 * 60 * 1000;
@@ -171,14 +171,27 @@ client.on('messageCreate', async (message) => {
         return message.reply(`⏳ နေ့စဉ်ဆုကြေး ထုတ်ပြီးသား ဖြစ်ပါတယ်။ နောက်ထပ် **${hours} နာရီ ${minutes} မိနစ်** နေမှ ပြန်ထုတ်နိုင်ပါမယ်။`);
       }
 
-      const reward = 500;
+      const MAX_DAILY = 10000;
+      const currentLevel = user.level || 1;
+      const currentExp = user.exp || 0;
+
+      const baseReward = 500;
+      const levelBonus = (currentLevel - 1) * 200; // Level 1 တက်တိုင်း +200 coins
+      const expBonus = Math.floor(currentExp * 0.5); // လက်ရှိ EXP ၏ 50%
+      const reward = Math.min(baseReward + levelBonus + expBonus, MAX_DAILY);
+
       user.balance += reward;
       user.lastDaily = now;
       await user.save();
-      return message.reply(`🎁 နေ့စဉ်ဆုကြေး **${reward} coins** ရရှိပါပြီ! လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**`);
+
+      const maxNote = reward >= MAX_DAILY ? ' *(MAX)*' : '';
+      return message.reply(
+        `🎁 **Lv.${currentLevel}** (${currentExp} EXP) နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!\n` +
+        `💰 လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**`
+      );
     }
 
-    // ၃။ အလုပ်လုပ်ပြီး ပိုက်ဆံရှာခြင်း (!work)
+    // ၃။ အလုပ်လုပ်ပြီး ပိုက်ဆံရှာခြင်း (Kwork) - Level & EXP အလိုက် တိုးမည် (Max: 3,000)
     if (command === 'work') {
       const now = Date.now();
       const cooldown = 30 * 60 * 1000;
@@ -189,14 +202,27 @@ client.on('messageCreate', async (message) => {
         return message.reply(`😓 အလုပ်လုပ်ထားတာ မောနေပါပြီ။ နောက်ထပ် **${minutes} မိနစ်** နေမှ ပြန်လုပ်နိုင်ပါမယ်။`);
       }
 
+      const MAX_WORK = 3000;
+      const currentLevel = user.level || 1;
+      const currentExp = user.exp || 0;
+
       const jobs = ['ပီဇာပို့ခြင်း', 'ကားရေဆေးခြင်း', 'Coding ရေးပေးခြင်း', 'ကော်ဖီဖျော်ခြင်း', 'Delivery ပို့ခြင်း'];
       const job = jobs[Math.floor(Math.random() * jobs.length)];
-      const earned = Math.floor(Math.random() * 151) + 50;
+
+      const baseEarned = Math.floor(Math.random() * 151) + 50; // အခြေခံ 50 - 200 coins
+      const levelBonus = (currentLevel - 1) * 60; // Level 1 တက်တိုင်း +60 coins
+      const expBonus = Math.floor(currentExp * 0.15); // လက်ရှိ EXP ၏ 15%
+      const earned = Math.min(baseEarned + levelBonus + expBonus, MAX_WORK);
 
       user.balance += earned;
       user.lastWork = now;
       await user.save();
-      return message.reply(`💼 သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned} coins** ရရှိခဲ့ပါတယ်! လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
+
+      const maxNote = earned >= MAX_WORK ? ' *(MAX)*' : '';
+      return message.reply(
+        `💼 **Lv.${currentLevel}** — သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned.toLocaleString()} coins**${maxNote} ရရှိခဲ့ပါတယ်!\n` +
+        `💰 လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**`
+      );
     }
 
     // ၄။ သူငယ်ချင်းဆီ ပိုက်ဆံလွှဲပေးခြင်း (!give @user 100)
