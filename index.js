@@ -90,20 +90,20 @@ const ANIMALS = [
   { name: 'တောဝက် (Rare)', emoji: '🐗', price: 180, chance: 1.5 },
 
   // 🟠 Epic (စုစုပေါင်း 6.5%)
-  { name: 'သိမ်းငှက် (Epic)', emoji: '🦅', price: 250, chance: 1.5 },
-  { name: 'မိကျောင်း (Epic)', emoji: '🐊', price: 300, chance: 1.2 },
-  { name: 'ဝက်ဝံညို (Epic)', emoji: '🐻', price: 350, chance: 1.1 },
-  { name: 'ပန်ဒါဝက်ဝံ (Epic)', emoji: '🐼', price: 420, chance: 1 },
-  { name: 'ကျားသစ် (Epic)', emoji: '🐆', price: 500, chance: 0.9 },
-  { name: 'ဂေါ်ရီလာ (Epic)', emoji: '🦍', price: 600, chance: 0.8 },
+  { name: 'သိမ်းငှက် (Epic)', emoji: '🦅', price: 2500, chance: 1.5 },
+  { name: 'မိကျောင်း (Epic)', emoji: '🐊', price: 3000, chance: 1.2 },
+  { name: 'ဝက်ဝံညို (Epic)', emoji: '🐻', price: 3500, chance: 1.1 },
+  { name: 'ပန်ဒါဝက်ဝံ (Epic)', emoji: '🐼', price: 4200, chance: 1 },
+  { name: 'ကျားသစ် (Epic)', emoji: '🐆', price: 5000, chance: 0.9 },
+  { name: 'ဂေါ်ရီလာ (Epic)', emoji: '🦍', price: 6000, chance: 0.8 },
 
   // 🔴 Legendary & Mythical (စုစုပေါင်း 1.5%)
-  { name: 'ခြင်္သေ့မင်း (Legendary)', emoji: '🦁', price: 800, chance: 0.5 },
-  { name: 'ကျားရဲ (Legendary)', emoji: '🐅', price: 1000, chance: 0.4 },
-  { name: 'ဆင်ပြောင်ကြီး (Legendary)', emoji: '🐘', price: 1300, chance: 0.3 },
-  { name: 'ကြံ့သူတော် (Legendary)', emoji: '🦏', price: 1600, chance: 0.15 },
-  { name: 'ယူနီကွန်း (Mythical)', emoji: '🦄', price: 2500, chance: 0.1 },
-  { name: 'နဂါးမင်း (Mythical)', emoji: '🐉', price: 5000, chance: 0.05 },
+  { name: 'ခြင်္သေ့မင်း (Legendary)', emoji: '🦁', price: 8000, chance: 0.5 },
+  { name: 'ကျားရဲ (Legendary)', emoji: '🐅', price: 10000, chance: 0.4 },
+  { name: 'ဆင်ပြောင်ကြီး (Legendary)', emoji: '🐘', price: 13000, chance: 0.3 },
+  { name: 'ကြံ့သူတော် (Legendary)', emoji: '🦏', price: 16000, chance: 0.15 },
+  { name: 'ယူနီကွန်း (Mythical)', emoji: '🦄', price: 25000, chance: 0.1 },
+  { name: 'နဂါးမင်း (Mythical)', emoji: '🐉', price: 50000, chance: 0.05 },
 ];
 
 // ဆိုင်တွင် ဝယ်ယူနိုင်သော ပစ္စည်းများ
@@ -461,7 +461,7 @@ client.on('messageCreate', async (message) => {
     }
 
     // ၁၀။ Slots ကစားခြင်း (Kslots - 'all' Max 500,000)
-    if (command === 'slots') {
+    if (command === 's' || command === 'slots') {
       const MAX_BET = 500000;
       const bet = args[0]?.toLowerCase() === 'all'
         ? Math.min(user.balance, MAX_BET)
