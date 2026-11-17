@@ -128,9 +128,6 @@ client.on('messageCreate', async (message) => {
   ];
   if (!validCommands.includes(command)) return;
 
-  const args = message.content.slice(1).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
-
   // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့်)
   const nowTime = Date.now();
   const cooldownAmount = 5000;
@@ -337,9 +334,12 @@ client.on('messageCreate', async (message) => {
 
     // ၉။ Coinflip ကစားခြင်း - Animation ပါဝင်သည် (!cf / !coinflip)
     if (command === 'cf' || command === 'coinflip') {
-      const bet = parseInt(args[0]);
+      const MAX_BET = 500000;
+      const bet = args[0]?.toLowerCase() === 'all'
+        ? Math.min(user.balance, MAX_BET)
+        : Math.min(parseInt(args[0]), MAX_BET);
       if (isNaN(bet) || bet <= 0) {
-        return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - !cf 100 သို့မဟုတ် !cf 100 tails)');
+        return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - Kcf 100 သို့မဟုတ် Kcf 100 tails)');
       }
       if (bet > user.balance) {
         return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
@@ -374,8 +374,11 @@ client.on('messageCreate', async (message) => {
 
     // ၁၀။ Slots ကစားခြင်း - Animation ပါဝင်သည် (!slots)
     if (command === 'slots') {
-      const bet = parseInt(args[0]);
-      if (isNaN(bet) || bet <= 0) return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - !slots 100)');
+      const MAX_BET = 500000;
+      const bet = args[0]?.toLowerCase() === 'all'
+        ? Math.min(user.balance, MAX_BET)
+        : Math.min(parseInt(args[0]), MAX_BET);
+      if (isNaN(bet) || bet <= 0) return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - Kslots 100)');
       if (bet > user.balance) return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
 
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
