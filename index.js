@@ -10,7 +10,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.MessageContent,x
   ],
 });
 
@@ -49,9 +49,9 @@ client.on('messageCreate', async (message) => {
   const commandObj = commandMap.get(commandName);
   if (!commandObj) return;
 
-  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့်)
+  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၈ စက္ကန့်)
   const nowTime = Date.now();
-  const cooldownAmount = 5000;
+  const cooldownAmount = 8000;
 
   if (cooldowns.has(message.author.id)) {
     const userData = cooldowns.get(message.author.id);
