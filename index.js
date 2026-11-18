@@ -164,7 +164,7 @@ client.on('messageCreate', async (message) => {
   ];
   if (!validCommands.includes(command)) return;
 
-  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
+// Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
   const nowTime = Date.now();
   const cooldownAmount = 5000;
 
@@ -184,13 +184,11 @@ client.on('messageCreate', async (message) => {
         return message.reply('သေချင်းဆိုး နားလေးနေလား');
       }
     }
+    clearTimeout(userData.timeoutId);
   }
 
-  cooldowns.set(message.author.id, { timestamp: nowTime, spamCount: 0 });
-  setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
-
-  cooldowns.set(message.author.id, nowTime);
-  setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
+  const timeoutId = setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
+  cooldowns.set(message.author.id, { timestamp: nowTime, spamCount: 0, timeoutId });
 
   try {
     const user = await getUser(message.author.id, message.author.username);
