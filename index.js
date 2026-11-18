@@ -29,6 +29,7 @@ const userSchema = new mongoose.Schema({
   lastWork: { type: Number, default: 0 },
   zoo: { type: Object, default: {} },
   items: { type: [String], default: [] },
+  itemUses: { type: Object, default: {} },
   boxes: { type: Number, default: 0 },
   exp: { type: Number, default: 0 },
   level: { type: Number, default: 1 },
@@ -106,15 +107,45 @@ const ANIMALS = [
   { name: 'နဂါးမင်း (Mythical)', emoji: '🐉', price: 50000, chance: 0.05 },
 ];
 
-// ဆိုင်တွင် ဝယ်ယူနိုင်သော ပစ္စည်းများ
+// ဆိုင်တွင် ဝယ်ယူနိုင်သော ပစ္စည်းများ (အကြိမ်ရေ Limit ပါဝင်သည်)
 const SHOP_ITEMS = [
-  { id: 'bow', name: 'လေးနှင့်မြား (Hunting Bow)', price: 500, luckBonus: 5, powerBonus: 0, desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +5% တိုးပေးသည်' },
-  { id: 'rifle', name: 'အမဲလိုက်သေနတ် (Hunting Rifle)', price: 2000, luckBonus: 12, powerBonus: 0, desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +12% တိုးပေးသည်' },
-  { id: 'charm', name: 'နဂါးအဆောင် (Dragon Charm)', price: 5000, luckBonus: 25, powerBonus: 0, desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +25% အထိ တိုးပေးသည်' },
-  { id: 'sword', name: 'သံမဏိဓား (Iron Sword)', price: 1500, luckBonus: 0, powerBonus: 150, desc: 'တိုက်ပွဲဝင်လျှင် Battle Power +150 တိုးပေးသည်' },
-  { id: 'shield', name: 'နဂါးဒိုင်းကာ (Dragon Shield)', price: 4000, luckBonus: 0, powerBonus: 350, desc: 'တိုက်ပွဲဝင်လျှင် Battle Power +350 တိုးပေးသည်' },
+  { id: 'bow', name: 'လေးနှင့်မြား (Hunting Bow)', price: 500, luckBonus: 5, powerBonus: 0, maxUses: 15, category: 'hunt', desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +5% တိုးပေးသည် (၁၅ ကြိမ်သုံး)' },
+  { id: 'rifle', name: 'အမဲလိုက်သေနတ် (Hunting Rifle)', price: 2000, luckBonus: 12, powerBonus: 0, maxUses: 25, category: 'hunt', desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +12% တိုးပေးသည် (၂၅ ကြိမ်သုံး)' },
+  { id: 'charm', name: 'နဂါးအဆောင် (Dragon Charm)', price: 5000, luckBonus: 25, powerBonus: 0, maxUses: 40, category: 'hunt', desc: 'အမဲလိုက်လျှင် ရှားပါးကောင် မိနိုင်ခြေ +25% အထိ တိုးပေးသည် (၄၀ ကြိမ်သုံး)' },
+  { id: 'net', name: 'အမဲလိုက်ပိုက်ကွန် (Hunting Net)', price: 3000, luckBonus: 0, powerBonus: 0, maxUses: 20, category: 'hunt', desc: 'အမဲလိုက်လျှင် ဖမ်းမိမည့် အကောင်ရေ +1 ကောင် ပိုတိုးပေးသည် (၂၀ ကြိမ်သုံး)' },
+  { id: 'cage', name: 'အမဲလိုက်လှောင်အိမ်ကြီး (Mega Cage)', price: 10000, luckBonus: 0, powerBonus: 0, maxUses: 15, category: 'hunt', desc: 'အမဲလိုက်လျှင် ဖမ်းမိမည့် အကောင်ရေ 2x နှစ်ဆ တိုးပေးသည် (၁၅ ကြိမ်သုံး)' },
+  { id: 'sword', name: 'သံမဏိဓား (Iron Sword)', price: 1500, luckBonus: 0, powerBonus: 150, maxUses: 15, category: 'battle', desc: 'တိုက်ပွဲဝင်လျှင် Battle Power +150 တိုးပေးသည် (၁၅ ကြိမ်သုံး)' },
+  { id: 'shield', name: 'နဂါးဒိုင်းကာ (Dragon Shield)', price: 4000, luckBonus: 0, powerBonus: 350, maxUses: 20, category: 'battle', desc: 'တိုက်ပွဲဝင်လျှင် Battle Power +350 တိုးပေးသည် (၂၀ ကြိမ်သုံး)' },
   { id: 'box', name: 'လျှို့ဝှက်သေတ္တာ (Mystery Box)', price: 1000, luckBonus: 0, powerBonus: 0, isConsumable: true, desc: 'Kopen ဖြင့် ဖွင့်ပြီး Coins, EXP နှင့် ရှားပါးကောင်များ ဖောက်ယူနိုင်သည်' },
 ];
+
+// ပစ္စည်းတစ်ခုချင်းစီ၏ အသုံးပြုခွင့် အကြိမ်ရေကို ၁ ကြိမ်စီ လျှော့ချပေးမည့် Function
+function useCategoryItems(user, category) {
+  if (!user.items || user.items.length === 0) return '';
+  if (!user.itemUses) user.itemUses = {};
+
+  let brokenMessages = [];
+  const activeItems = [...user.items];
+
+  for (const itemId of activeItems) {
+    const itemInfo = SHOP_ITEMS.find((i) => i.id === itemId && i.category === category);
+    if (!itemInfo || !itemInfo.maxUses) continue;
+
+    const currentUses = user.itemUses[itemId] !== undefined ? user.itemUses[itemId] : itemInfo.maxUses;
+    const remaining = currentUses - 1;
+
+    if (remaining <= 0) {
+      user.items = user.items.filter((id) => id !== itemId);
+      delete user.itemUses[itemId];
+      brokenMessages.push(`⚠️ သင်၏ **${itemInfo.name}** အသုံးပြုခွင့် ပြည့်သွား၍ ပျက်စီးသွားပါပြီ!`);
+    } else {
+      user.itemUses[itemId] = remaining;
+    }
+  }
+
+  user.markModified('itemUses');
+  return brokenMessages.length > 0 ? `\n${brokenMessages.join('\n')}` : '';
+}
 
 // တိရစ္ဆာန်အဖွဲ့ (Top 3) နှင့် ပစ္စည်း Power တွက်ချက်ပေးမည့် Helper Function
 function getBattleStats(userObj) {
@@ -344,28 +375,49 @@ client.on('messageCreate', async (message) => {
 
       user.balance -= cost;
 
+      // လက်ရှိ ပိုင်ဆိုင်သော ပစ္စည်းများမှ Luck Bonus ပေါင်းယူခြင်း
       let totalLuck = 0;
-      for (const itemId of user.items) {
+      for (const itemId of user.items || []) {
         const itemInfo = SHOP_ITEMS.find((i) => i.id === itemId);
-        if (itemInfo) totalLuck += itemInfo.luckBonus;
-      }
-
-      let roll = Math.random() * 100 + totalLuck;
-      if (roll > 100) roll = 100;
-      let cumulative = 0;
-      let caught = ANIMALS[0];
-
-      for (const animal of ANIMALS) {
-        cumulative += animal.chance;
-        if (roll <= cumulative) {
-          caught = animal;
-          break;
+        if (itemInfo && itemInfo.luckBonus) {
+          totalLuck += itemInfo.luckBonus;
         }
       }
 
+      // ဖမ်းမိမည့် အကောင်ရေ တွက်ချက်ခြင်း (net = +1 ကောင်, cage = 2x နှစ်ဆ)
+      let catchCount = 1;
+      if ((user.items || []).includes('net')) catchCount += 1;
+      if ((user.items || []).includes('cage')) catchCount *= 2;
+
       if (!user.zoo) user.zoo = {};
-      user.zoo[caught.name] = (user.zoo[caught.name] || 0) + 1;
+      const caughtSummary = {};
+
+      for (let i = 0; i < catchCount; i++) {
+        let roll = Math.random() * 100 + totalLuck;
+        if (roll > 100) roll = 100;
+        let cumulative = 0;
+        let caught = ANIMALS[0];
+
+        for (const animal of ANIMALS) {
+          cumulative += animal.chance;
+          if (roll <= cumulative) {
+            caught = animal;
+            break;
+          }
+        }
+
+        user.zoo[caught.name] = (user.zoo[caught.name] || 0) + 1;
+        if (!caughtSummary[caught.name]) {
+          caughtSummary[caught.name] = { emoji: caught.emoji, count: 0 };
+        }
+        caughtSummary[caught.name].count += 1;
+      }
+
       user.markModified('zoo');
+
+      const caughtListText = Object.entries(caughtSummary)
+        .map(([name, data]) => `${data.emoji} **${name}**${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
+        .join('၊ ');
 
       // 10% အခွင့်အရေးဖြင့် Mystery Box ကောက်ရမည်
       let foundBoxText = '';
@@ -374,11 +426,14 @@ client.on('messageCreate', async (message) => {
         foundBoxText = `\n🎁 တောထဲမှ **Mystery Box +1** ကောက်ရရှိပါတယ်! (\`Kopen\` ဖြင့် ဖွင့်ပါ)`;
       }
 
+      // အမဲလိုက်ပစ္စည်းများ၏ အကြိမ်ရေ Limit ကို ၁ ကြိမ်စီ လျှော့ချခြင်း
+      const brokenItemText = useCategoryItems(user, 'hunt');
+
       await user.save();
 
       return message.reply(
-        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caught.emoji} **${caught.name}** တစ်ကောင် ဖမ်းမိခဲ့ပါတယ်! ` +
-        `(ကျန်ငွေ: **${user.balance.toLocaleString()} coins**)${foundBoxText}`
+        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်! ` +
+        `(ကျန်ငွေ: **${user.balance.toLocaleString()} coins**)${foundBoxText}${brokenItemText}`
       );
     }
 
@@ -607,8 +662,9 @@ client.on('messageCreate', async (message) => {
         let status = `💰 **${item.price.toLocaleString()} coins**`;
         if (item.isConsumable) {
           status += ` *(လက်ရှိ: ${user.boxes || 0} လုံး)*`;
-        } else if (user.items.includes(item.id)) {
-          status = '✅ *(ဝယ်ပြီး)*';
+        } else if ((user.items || []).includes(item.id)) {
+          const left = (user.itemUses && user.itemUses[item.id] !== undefined) ? user.itemUses[item.id] : item.maxUses;
+          status = `✅ *(ဝယ်ပြီး — ကျန်: **${left}/${item.maxUses}** ကြိမ်)*`;
         }
         return `🛒 **${item.name}** (ID: \`${item.id}\`)\n└ ${item.desc} — ${status}`;
       }).join('\n\n');
@@ -630,7 +686,7 @@ client.on('messageCreate', async (message) => {
       if (!item) {
         return message.reply('❌ ပစ္စည်း ID မှားယွင်းနေပါတယ်။ ဆိုင်ထဲက ပစ္စည်းများကို ကြည့်ရန် `Kshop` ကို ရိုက်ပါ။');
       }
-      if (!item.isConsumable && user.items.includes(item.id)) {
+      if (!item.isConsumable && (user.items || []).includes(item.id)) {
         return message.reply(`✅ သင်သည် **${item.name}** ကို ဝယ်ယူပြီးသား ဖြစ်ပါတယ်!`);
       }
       if (user.balance < item.price) {
@@ -644,8 +700,11 @@ client.on('messageCreate', async (message) => {
         return message.reply(`🎉 **${item.name}** ၁ လုံး ဝယ်ယူပြီးပါပြီ! (စုစုပေါင်း: **${user.boxes} လုံး** — ဖွင့်ရန် \`Kopen\` ရိုက်ပါ)`);
       } else {
         user.items.push(item.id);
+        if (!user.itemUses) user.itemUses = {};
+        user.itemUses[item.id] = item.maxUses;
+        user.markModified('itemUses');
         await user.save();
-        return message.reply(`🎉 **${item.name}** ကို **${item.price.toLocaleString()} coins** ဖြင့် အောင်မြင်စွာ ဝယ်ယူပြီးပါပြီ!`);
+        return message.reply(`🎉 **${item.name}** ကို **${item.price.toLocaleString()} coins** ဖြင့် ဝယ်ယူပြီးပါပြီ! (အသုံးပြုခွင့်: **${item.maxUses} ကြိမ်**)`);
       }
     }
 
@@ -739,6 +798,9 @@ client.on('messageCreate', async (message) => {
         const msg = await message.reply({ embeds: [pvpEmbed] });
         await sleep(1500);
 
+        // တိုက်ပွဲသုံး လက်နက်/ဒိုင်းကာ အကြိမ်ရေ ၁ ကြိမ်စီ လျှော့ချခြင်း
+        const brokenItemText = useCategoryItems(user, 'battle');
+
         if (myStats.totalPower >= oppStats.totalPower) {
           const gainedExp = Math.floor(Math.random() * 31) + 45;
           const isLevelUp = addExp(user, gainedExp);
@@ -757,6 +819,7 @@ client.on('messageCreate', async (message) => {
           if (isLevelUp) {
             resultText += `\n🎊 **LEVEL UP!** **${message.author.username}** သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
           }
+          resultText += brokenItemText;
 
           pvpEmbed.setColor('#2ECC71').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
         } else {
@@ -771,6 +834,7 @@ client.on('messageCreate', async (message) => {
           if (oppLevelUp) {
             resultText += `\n🎊 **LEVEL UP!** **${opponentMention.username}** သည် **Level ${oppUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
           }
+          resultText += brokenItemText;
 
           pvpEmbed.setColor('#E74C3C').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
         }
@@ -800,6 +864,9 @@ client.on('messageCreate', async (message) => {
       const msg = await message.reply({ embeds: [battleEmbed] });
       await sleep(1500);
 
+      // တိုက်ပွဲသုံး လက်နက်/ဒိုင်းကာ အကြိမ်ရေ ၁ ကြိမ်စီ လျှော့ချခြင်း
+      const brokenItemText = useCategoryItems(user, 'battle');
+
       if (myStats.totalPower >= enemyPower) {
         const gainedExp = Math.floor(Math.random() * 31) + 30;
         const isLevelUp = addExp(user, gainedExp);
@@ -816,6 +883,7 @@ client.on('messageCreate', async (message) => {
         if (isLevelUp) {
           winText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
+        winText += brokenItemText;
 
         battleEmbed.setColor('#2ECC71').setDescription(winText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       } else {
@@ -827,13 +895,13 @@ client.on('messageCreate', async (message) => {
         if (isLevelUp) {
           loseText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
+        loseText += brokenItemText;
 
         battleEmbed.setColor('#E74C3C').setDescription(loseText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       }
 
       return msg.edit({ embeds: [battleEmbed] });
     }
-
     // ၁၆။ Level, EXP နှင့် Profile ကြည့်ရှုခြင်း (Kprofile / Klvl / Klevel)
     if (command === 'profile' || command === 'lvl' || command === 'level') {
       const neededExp = user.level * 100;
