@@ -309,9 +309,9 @@ client.on('messageCreate', async (message) => {
   ];
   if (!validCommands.includes(command)) return;
 
-  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
+  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၁၀ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
   const nowTime = Date.now();
-  const cooldownAmount = 5000;
+  const cooldownAmount = 10000;
 
   if (cooldowns.has(message.author.id)) {
     const userData = cooldowns.get(message.author.id);
