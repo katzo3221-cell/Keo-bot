@@ -164,17 +164,30 @@ client.on('messageCreate', async (message) => {
   ];
   if (!validCommands.includes(command)) return;
 
-  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့်)
+  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
   const nowTime = Date.now();
   const cooldownAmount = 5000;
 
   if (cooldowns.has(message.author.id)) {
-    const expirationTime = cooldowns.get(message.author.id) + cooldownAmount;
+    const userData = cooldowns.get(message.author.id);
+    const expirationTime = userData.timestamp + cooldownAmount;
+
     if (nowTime < expirationTime) {
+      userData.spamCount += 1;
       const timeLeft = ((expirationTime - nowTime) / 1000).toFixed(1);
-      return message.reply(`⏳ ဖြည်းဖြည်းရိုက်ပါခင်ဗျာ! နောက်ထပ် **${timeLeft} စက္ကန့်** စောင့်ပြီးမှ ပြန်ရိုက်ပါ။`);
+
+      if (userData.spamCount === 1) {
+        return message.reply(`⏳ ဖြည်းဖြည်းရိုက်ပါခင်ဗျာ! နောက်ထပ် **${timeLeft} စက္ကန့်** စောင့်ပြီးမှ ပြန်ရိုက်ပါ။`);
+      } else if (userData.spamCount === 2) {
+        return message.reply('သေချင်းဆိုး ဖြည်းဖြည်းရိုက်ဟ');
+      } else {
+        return message.reply('သေချင်းဆိုး နားလေးနေလား');
+      }
     }
   }
+
+  cooldowns.set(message.author.id, { timestamp: nowTime, spamCount: 0 });
+  setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
 
   cooldowns.set(message.author.id, nowTime);
   setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
