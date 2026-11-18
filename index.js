@@ -11,7 +11,7 @@ const client = new Client({
   ],
 });
 
-// Anti-Spam Cooldown Map
+// Anti-Spam Cooldown Map & Active Games
 const cooldowns = new Map();
 const activeBlackjack = new Set();
 
@@ -31,6 +31,7 @@ const userSchema = new mongoose.Schema({
   zoo: { type: Object, default: {} },
   items: { type: [String], default: [] },
   itemUses: { type: Object, default: {} },
+  actions: { type: Object, default: {} },
   boxes: { type: Number, default: 0 },
   exp: { type: Number, default: 0 },
   level: { type: Number, default: 1 },
@@ -120,6 +121,59 @@ const SHOP_ITEMS = [
   { id: 'box', name: 'လျှို့ဝှက်သေတ္တာ (Mystery Box)', price: 1000, luckBonus: 0, powerBonus: 0, isConsumable: true, desc: 'Kopen ဖြင့် ဖွင့်ပြီး Coins, EXP နှင့် ရှားပါးကောင်များ ဖောက်ယူနိုင်သည်' },
 ];
 
+// Action Command များ အချက်အလက် (OwO Style)
+const ACTIONS = {
+  hug: {
+    title: '🤗 နွေးထွေးစွာ ဖက်လိုက်ပါပြီ!',
+    actionText: 'ကို တင်းတင်းကျပ်ကျပ် ဖက်လိုက်ပါတယ်!',
+    countLabel: 'ဖက်ပြီးပါပြီ ❤️',
+    color: '#FF69B4',
+    fallbackGif: 'https://nekos.best/api/v2/hug/001.gif',
+  },
+  pat: {
+    title: '🥰 ခေါင်းလေး ပုတ်ပေးလိုက်ပါပြီ!',
+    actionText: 'ရဲ့ ခေါင်းလေးကို ချစ်စနိုးနဲ့ ပုတ်ပေးလိုက်ပါတယ်!',
+    countLabel: 'ခေါင်းပုတ်ပြီးပါပြီ ✨',
+    color: '#F1C40F',
+    fallbackGif: 'https://nekos.best/api/v2/pat/001.gif',
+  },
+  slap: {
+    title: '🖐️ ဖြန်းခနဲ ပါးရိုက်လိုက်ပါပြီ!',
+    actionText: 'ကို အားရပါးရ ပါးရိုက်ချလိုက်ပါတယ်!',
+    countLabel: 'ပါးရိုက်ပြီးပါပြီ 💥',
+    color: '#E74C3C',
+    fallbackGif: 'https://nekos.best/api/v2/slap/001.gif',
+  },
+  kiss: {
+    title: '😘 ချစ်စနိုးနဲ့ နမ်းလိုက်ပါပြီ!',
+    actionText: 'ကို ကြင်ကြင်နာနာ နမ်းလိုက်ပါတယ်!',
+    countLabel: 'နမ်းပြီးပါပြီ 💕',
+    color: '#E91E63',
+    fallbackGif: 'https://nekos.best/api/v2/kiss/001.gif',
+  },
+  cuddle: {
+    title: '💞 ချစ်ခင်စွာ ပွေ့ဖက်လိုက်ပါပြီ!',
+    actionText: 'ကို ရင်ခွင်ထဲ ထည့်ပြီး ပွေ့ဖက်ထားပါတယ်!',
+    countLabel: 'ပွေ့ဖက်ပြီးပါပြီ 🌸',
+    color: '#FF85A2',
+    fallbackGif: 'https://nekos.best/api/v2/cuddle/001.gif',
+  },
+  poke: {
+    title: '👉 စနောက်ပြီး တို့လိုက်ပါပြီ!',
+    actionText: 'ကို စချင်လို့ လက်ညှိုးနဲ့ တို့လိုက်ပါတယ်!',
+    countLabel: 'တို့ပြီးပါပြီ 👀',
+    color: '#3498DB',
+    fallbackGif: 'https://nekos.best/api/v2/poke/001.gif',
+  },
+  punch: {
+    title: '👊 ပြင်းပြင်းထန်ထန် ထိုးချလိုက်ပါပြီ!',
+    actionText: 'ကို လက်သီးနဲ့ ပစ်ထိုးလိုက်ပါတယ်!',
+    countLabel: 'ထိုးပြီးပါပြီ 🔥',
+    color: '#C0392B',
+    fallbackGif: 'https://nekos.best/api/v2/punch/001.gif',
+  },
+};
+
 // ပစ္စည်းတစ်ခုချင်းစီ၏ အသုံးပြုခွင့် အကြိမ်ရေကို ၁ ကြိမ်စီ လျှော့ချပေးမည့် Function
 function useCategoryItems(user, category) {
   if (!user.items || user.items.length === 0) return '';
@@ -195,10 +249,11 @@ client.on('messageCreate', async (message) => {
     'battle', 'b', 'd', 'dice', 'profile', 'lvl', 'level',
     'obj', 'item', 'use', 'inv', 'inventory', 'reset', 'clear',
     'bj', 'blackjack',
+    'hug', 'pat', 'slap', 'kiss', 'cuddle', 'poke', 'punch',
   ];
   if (!validCommands.includes(command)) return;
 
-// Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
+  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၅ စက္ကန့် - အကြိမ်အရေအတွက်အလိုက် စာသားပြောင်းမည်)
   const nowTime = Date.now();
   const cooldownAmount = 5000;
 
@@ -254,7 +309,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`⏳ နေ့စဉ်ဆုကြေး ထုတ်ပြီးသား ဖြစ်ပါတယ်။ နောက်ထပ် **${hours} နာရီ ${minutes} မိနစ်** နေမှ ပြန်ထုတ်နိုင်ပါမယ်။`);
       }
 
-      // ၄၈ နာရီအတွင်း ပြန်ထုတ်ပါက Streak ဆက်တိုးမည်
       if (user.lastDaily > 0 && now - user.lastDaily <= 48 * 60 * 60 * 1000) {
         user.dailyStreak = (user.dailyStreak || 0) + 1;
       } else {
@@ -378,7 +432,6 @@ client.on('messageCreate', async (message) => {
 
       user.balance -= cost;
 
-      // လက်ရှိ ပိုင်ဆိုင်သော ပစ္စည်းများမှ Luck Bonus ပေါင်းယူခြင်း
       let totalLuck = 0;
       for (const itemId of user.items || []) {
         const itemInfo = SHOP_ITEMS.find((i) => i.id === itemId);
@@ -387,7 +440,6 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      // ဖမ်းမိမည့် အကောင်ရေ တွက်ချက်ခြင်း (net = +1 ကောင်, cage = 2x နှစ်ဆ)
       let catchCount = 1;
       if ((user.items || []).includes('net')) catchCount += 1;
       if ((user.items || []).includes('cage')) catchCount *= 2;
@@ -422,14 +474,12 @@ client.on('messageCreate', async (message) => {
         .map(([name, data]) => `${data.emoji} **${name}**${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
         .join('၊ ');
 
-      // 10% အခွင့်အရေးဖြင့် Mystery Box ကောက်ရမည်
       let foundBoxText = '';
       if (Math.random() < 0.10) {
         user.boxes = (user.boxes || 0) + 1;
         foundBoxText = `\n🎁 တောထဲမှ **Mystery Box +1** ကောက်ရရှိပါတယ်! (\`Kopen\` ဖြင့် ဖွင့်ပါ)`;
       }
 
-      // အမဲလိုက်ပစ္စည်းများ၏ အကြိမ်ရေ Limit ကို ၁ ကြိမ်စီ လျှော့ချခြင်း
       const brokenItemText = useCategoryItems(user, 'hunt');
 
       await user.save();
@@ -579,6 +629,7 @@ client.on('messageCreate', async (message) => {
         return msg.edit(`${board}\n💸 ဘာမှ မတူလို့ **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။ လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
       }
     }
+
     // အံစာတုံး အသေး/အကြီး/လန့် ကစားခြင်း (Kd / Kdice - 'all' Max 250,000)
     if (command === 'd' || command === 'dice') {
       const MAX_BET = 250000;
@@ -633,7 +684,10 @@ client.on('messageCreate', async (message) => {
         resultLabel = `🔥 လန့် (${d1}-${d2}-${d3})`;
       } else if (sum >= 4 && sum <= 10) {
         actualResult = 'small';
-        resultLabel = `🔽 အသေး (ပေါင်းလဒ်: ${sum})`; } else { actualResult = 'big'; resultLabel = `🔼 အကြီး (ပေါင်းလဒ်: ${sum})`;
+        resultLabel = `🔽 အသေး (ပေါင်းလဒ်: ${sum})`;
+      } else {
+        actualResult = 'big';
+        resultLabel = `🔼 အကြီး (ပေါင်းလဒ်: ${sum})`;
       }
 
       const board = `🎲 **[ ${diceEmojis[d1 - 1]} | ${diceEmojis[d2 - 1]} | ${diceEmojis[d3 - 1]} ]** ➔ **${resultLabel}**`;
@@ -680,6 +734,7 @@ client.on('messageCreate', async (message) => {
 
       return message.reply({ embeds: [shopEmbed] });
     }
+
     // Blackjack ဖဲကစားခြင်း (Kbj / Kblackjack - Button စနစ် | 'all' Max 250,000)
     if (command === 'bj' || command === 'blackjack') {
       if (activeBlackjack.has(message.author.id)) {
@@ -698,7 +753,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
       }
 
-      // ဖဲထုပ် ၅၂ ချပ် တည်ဆောက်ပြီး မွှေခြင်း
       const suits = ['♠️', '♥️', '♦️', '♣️'];
       const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
       const deck = [];
@@ -739,7 +793,6 @@ client.on('messageCreate', async (message) => {
         return hand.map((c) => `\`[ ${c.rank}${c.suit} ]\``).join(' ');
       };
 
-      // လောင်းကြေး ကြိုတင်နုတ်ယူထားခြင်း
       user.balance -= bet;
       await user.save();
 
@@ -748,7 +801,6 @@ client.on('messageCreate', async (message) => {
       const playerTotal = calcHand(playerHand);
       const dealerTotal = calcHand(dealerHand);
 
-      // ပထမ ၂ ချပ်တည်းဖြင့် 21 (Natural Blackjack) ကျခြင်း စစ်ဆေးခြင်း
       if (playerTotal === 21) {
         if (dealerTotal === 21) {
           user.balance += bet;
@@ -795,7 +847,6 @@ client.on('messageCreate', async (message) => {
           .setDescription(statusText);
       };
 
-      // Hit နှင့် Stand ခလုတ် ၂ ခု တည်ဆောက်ခြင်း
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('bj_hit')
@@ -855,7 +906,6 @@ client.on('messageCreate', async (message) => {
         activeBlackjack.delete(message.author.id);
         if (reason === 'bust') return;
 
-        // Dealer 17 မှတ် မပြည့်မချင်း ဖဲဆွဲမည်
         while (calcHand(dealerHand) < 17) {
           dealerHand.push(deck.pop());
         }
@@ -953,7 +1003,7 @@ client.on('messageCreate', async (message) => {
           rewardMessage += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
       } else {
-        const rarePool = ANIMALS.slice(12); // Rare မှ Mythical အထိ
+        const rarePool = ANIMALS.slice(12);
         const prizeAnimal = rarePool[Math.floor(Math.random() * rarePool.length)];
         if (!user.zoo) user.zoo = {};
         user.zoo[prizeAnimal.name] = (user.zoo[prizeAnimal.name] || 0) + 1;
@@ -973,10 +1023,11 @@ client.on('messageCreate', async (message) => {
         .addFields(
           { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kgive @user <amount>`, `Ktop`' },
           { name: '🏹 Hunting & Box', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksellall`, `Kopen` (`Kbox`)' },
-          { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbowl <amount/all>`, `Kbj <amount/all>`' },
+          { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`) သို့မဟုတ် `Kbattle @user`' },
+          { name: '🤗 Actions (လှုပ်ရှားမှုများ)', value: '`Khug`, `Kpat`, `Kslap`, `Kkiss`, `Kcuddle`, `Kpoke`, `Kpunch` (`@user`)' },
           { name: '📈 Level & Profile', value: '`Kprofile`, `Klvl`, `Klevel`' }
-           )
+        )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 
       return message.reply({ embeds: [helpEmbed] });
@@ -993,7 +1044,6 @@ client.on('messageCreate', async (message) => {
       const myTeamText = myStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
       const opponentMention = message.mentions.users.first();
 
-      // PvP Battle (သူငယ်ချင်းနှင့် တိုက်ခိုက်ခြင်း)
       if (opponentMention) {
         if (opponentMention.bot) {
           return message.reply('❌ Bot များကို စိန်ခေါ်၍ မရပါ။');
@@ -1021,7 +1071,6 @@ client.on('messageCreate', async (message) => {
         const msg = await message.reply({ embeds: [pvpEmbed] });
         await sleep(1500);
 
-        // တိုက်ပွဲသုံး လက်နက်/ဒိုင်းကာ အကြိမ်ရေ ၁ ကြိမ်စီ လျှော့ချခြင်း
         const brokenItemText = useCategoryItems(user, 'battle');
 
         if (myStats.totalPower >= oppStats.totalPower) {
@@ -1065,7 +1114,6 @@ client.on('messageCreate', async (message) => {
         return msg.edit({ embeds: [pvpEmbed] });
       }
 
-      // Solo Wild Battle (တောရိုင်းအဖွဲ့နှင့် တိုက်ခိုက်ခြင်း)
       const enemyTeam = [
         ANIMALS[Math.floor(Math.random() * 20)],
         ANIMALS[Math.floor(Math.random() * 25)],
@@ -1087,7 +1135,6 @@ client.on('messageCreate', async (message) => {
       const msg = await message.reply({ embeds: [battleEmbed] });
       await sleep(1500);
 
-      // တိုက်ပွဲသုံး လက်နက်/ဒိုင်းကာ အကြိမ်ရေ ၁ ကြိမ်စီ လျှော့ချခြင်း
       const brokenItemText = useCategoryItems(user, 'battle');
 
       if (myStats.totalPower >= enemyPower) {
@@ -1125,6 +1172,7 @@ client.on('messageCreate', async (message) => {
 
       return msg.edit({ embeds: [battleEmbed] });
     }
+
     // ၁၆။ Level, EXP နှင့် Profile ကြည့်ရှုခြင်း (Kprofile / Klvl / Klevel)
     if (command === 'profile' || command === 'lvl' || command === 'level') {
       const neededExp = user.level * 100;
@@ -1146,6 +1194,52 @@ client.on('messageCreate', async (message) => {
         .setFooter({ text: 'EXP ရရှိရန် Kbattle ကို ကစားပါ' });
 
       return message.reply({ embeds: [profileEmbed] });
+    }
+
+    // ၁၇။ Action Commands (Khug, Kpat, Kslap, Kkiss, Kcuddle, Kpoke, Kpunch)
+    if (ACTIONS[command]) {
+      const target = message.mentions.users.first();
+      if (!target) {
+        return message.reply(`❌ လုပ်ဆောင်မယ့် သူကို Mention ခေါ်ပေးပါ! (ဥပမာ - \`K${command} @User\`)`);
+      }
+      if (target.id === message.author.id) {
+        return message.reply('❌ ကိုယ့်ကိုယ်ကိုယ် ပြန်လုပ်လို့ မရပါဘူး! တခြားတစ်ယောက်ကို Mention ခေါ်ပါ။');
+      }
+
+      const actionData = ACTIONS[command];
+
+      // MongoDB ထဲတွင် တစ်ဦးချင်းစီ အကြိမ်ရေ မှတ်သားခြင်း
+      if (!user.actions) user.actions = {};
+      const pairKey = `${command}_${target.id}`;
+      user.actions[pairKey] = (user.actions[pairKey] || 0) + 1;
+      user.markModified('actions');
+      await user.save();
+
+      const totalCount = user.actions[pairKey];
+
+      // nekos.best API မှ Anime GIF လှမ်းယူခြင်း
+      let gifUrl = actionData.fallbackGif;
+      try {
+        const res = await fetch(`https://nekos.best/api/v2/${command}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.results?.[0]?.url) {
+            gifUrl = data.results[0].url;
+          }
+        }
+      } catch (apiErr) {
+        console.error('Action GIF Fetch Error:', apiErr);
+      }
+
+      const actionEmbed = new EmbedBuilder()
+        .setColor(actionData.color)
+        .setTitle(actionData.title)
+        .setDescription(`**${message.author.username}** က **${target.username}** ${actionData.actionText}`)
+        .setImage(gifUrl)
+        .setFooter({ text: `စုစုပေါင်း ${totalCount.toLocaleString()} ကြိမ် ${actionData.countLabel}` })
+        .setTimestamp();
+
+      return message.reply({ content: `<@${target.id}>`, embeds: [actionEmbed] });
     }
   } catch (err) {
     console.error('Command Error:', err);
