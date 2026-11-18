@@ -313,8 +313,7 @@ client.on('messageCreate', async (message) => {
 
       const maxNote = reward >= MAX_DAILY ? ' *(MAX)*' : '';
       return message.reply(
-        `🎁 **Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!` +
-        `${boxBonusText}\n💰 လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**`
+        `🎁 **Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!${boxBonusText}`
       );
     }
 
@@ -347,8 +346,7 @@ client.on('messageCreate', async (message) => {
 
       const maxNote = earned >= MAX_WORK ? ' *(MAX)*' : '';
       return message.reply(
-        `💼 **Lv.${currentLevel}** — သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned.toLocaleString()} coins**${maxNote} ရရှိခဲ့ပါတယ်!\n` +
-        `💰 လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**`
+        `💼 **Lv.${currentLevel}** — သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned.toLocaleString()} coins**${maxNote} ရရှိခဲ့ပါတယ်!`
       );
     }
 
@@ -367,7 +365,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ လွှဲမယ့် ပမာဏ မှန်ကန်စွာ ထည့်ပါ။');
       }
       if (amount > user.balance) {
-        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+        return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
       const targetUser = await getUser(target.id, target.username);
@@ -461,8 +459,7 @@ client.on('messageCreate', async (message) => {
       await user.save();
 
       return message.reply(
-        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်! ` +
-        `(ကျန်ငွေ: **${user.balance.toLocaleString()} coins**)${foundBoxText}${brokenItemText}`
+        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်!${foundBoxText}${brokenItemText}`
       );
     }
 
@@ -512,7 +509,7 @@ client.on('messageCreate', async (message) => {
       user.markModified('zoo');
       await user.save();
 
-      return message.reply(`💵 ဖမ်းထားသော တိရစ္ဆာန်အားလုံးကို ရောင်းချလိုက်ရာ **+${totalEarned.toLocaleString()} coins** ရရှိပါပြီ! စုစုပေါင်း လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
+      return message.reply(`💵 ဖမ်းထားသော တိရစ္ဆာန်အားလုံးကို ရောင်းချလိုက်ရာ **+${totalEarned.toLocaleString()} coins** ရရှိပါပြီ!`);
     }
 
     // ၉။ Coinflip ကစားခြင်း (Kcf / Kcoinflip - 'all' Max 250,000)
@@ -526,7 +523,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kcf 100` သို့မဟုတ် `Kcf all`)');
       }
       if (bet > user.balance) {
-        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+        return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -547,11 +544,11 @@ client.on('messageCreate', async (message) => {
       if (choice === result) {
         user.balance += bet;
         await user.save();
-        return msg.edit(`🪙 အကြွေစေ့ ကျသွားပါပြီ — **${resultText}**!\n🎉 **နိုင်ပါတယ်!** **+${bet.toLocaleString()} coins** ရရှိပြီး စုစုပေါင်း **${user.balance.toLocaleString()} coins** ရှိသွားပါပြီ။`);
+        return msg.edit(`🪙 အကြွေစေ့ ကျသွားပါပြီ — **${resultText}**!\n🎉 **နိုင်ပါတယ်!** **+${bet.toLocaleString()} coins** ရရှိပါတယ်။`);
       } else {
         user.balance -= bet;
         await user.save();
-        return msg.edit(`🪙 အကြွေစေ့ ကျသွားပါပြီ — **${resultText}**!\n😢 **ရှုံးသွားပါတယ်!** **-${bet.toLocaleString()} coins** ဆုံးရှုံးပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** သာ ကျန်ပါတော့တယ်။`);
+        return msg.edit(`🪙 အကြွေစေ့ ကျသွားပါပြီ — **${resultText}**!\n😢 **ရှုံးသွားပါတယ်!** **-${bet.toLocaleString()} coins** ဆုံးရှုံးသွားပါတယ်။`);
       }
     }
 
@@ -566,7 +563,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kslots 100` သို့မဟုတ် `Kslots all`)');
       }
       if (bet > user.balance) {
-        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+        return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -593,16 +590,16 @@ client.on('messageCreate', async (message) => {
         const winnings = bet * 5;
         user.balance += winnings;
         await user.save();
-        return msg.edit(`${board}\n🔥 **JACKPOT!** ၃ ခုလုံး တူသွားလို့ **+${winnings.toLocaleString()} coins** အနိုင်ရရှိပါတယ်! လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
+        return msg.edit(`${board}\n🔥 **JACKPOT!** ၃ ခုလုံး တူသွားလို့ **+${winnings.toLocaleString()} coins** အနိုင်ရရှိပါတယ်!`);
       } else if (slot1 === slot2 || slot2 === slot3 || slot1 === slot3) {
         const winnings = Math.floor(bet * 1.5);
         user.balance += winnings;
         await user.save();
-        return msg.edit(`${board}\n✨ ၂ ခု တူသွားလို့ **+${winnings.toLocaleString()} coins** အနိုင်ရရှိပါတယ်! လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
+        return msg.edit(`${board}\n✨ ၂ ခု တူသွားလို့ **+${winnings.toLocaleString()} coins** အနိုင်ရရှိပါတယ်!`);
       } else {
         user.balance -= bet;
         await user.save();
-        return msg.edit(`${board}\n💸 ဘာမှ မတူလို့ **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။ လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
+        return msg.edit(`${board}\n💸 ဘာမှ မတူလို့ **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။`);
       }
     }
 
@@ -617,7 +614,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kd 1000 s` / `Kd all b` / `Kd 500 t`)');
       }
       if (bet > user.balance) {
-        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+        return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
       const rawChoice = args[1]?.toLowerCase();
@@ -676,7 +673,7 @@ client.on('messageCreate', async (message) => {
 
         const tripleNote = choice === 'triple' ? ' (**20x JACKPOT!**)' : '';
         return msg.edit(
-          `${board}\n🎉 **အနိုင်ရရှိပါတယ်!**${tripleNote} **+${winnings.toLocaleString()} coins** ရရှိပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** ရှိသွားပါပြီ။`
+          `${board}\n🎉 **အနိုင်ရရှိပါတယ်!**${tripleNote} **+${winnings.toLocaleString()} coins** ရရှိပါတယ်။`
         );
       } else {
         user.balance -= bet;
@@ -684,7 +681,7 @@ client.on('messageCreate', async (message) => {
 
         const lanLossNote = isTriple && choice !== 'triple' ? ' *(လန့် ကျသွားသဖြင့် အသေး/အကြီး ရှုံးပါသည်)*' : '';
         return msg.edit(
-          `${board}\n💸 **ရှုံးသွားပါတယ်!**${lanLossNote} **-${bet.toLocaleString()} coins** ဆုံးရှုံးပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** သာ ကျန်ပါတော့တယ်။`
+          `${board}\n💸 **ရှုံးသွားပါတယ်!**${lanLossNote} **-${bet.toLocaleString()} coins** ဆုံးရှုံးသွားပါတယ်။`
         );
       }
     }
@@ -726,7 +723,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kbj 1000` သို့မဟုတ် `Kbj all`)');
       }
       if (bet > user.balance) {
-        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+        return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
       const suits = ['♠️', '♥️', '♦️', '♣️'];
@@ -804,7 +801,7 @@ client.on('messageCreate', async (message) => {
             { name: `🧑 ${message.author.username} (21)`, value: formatHand(playerHand), inline: true },
             { name: `🤖 Dealer (${dealerTotal})`, value: formatHand(dealerHand), inline: true }
           )
-          .setDescription(`🔥 **BLACKJACK!** **+${profit.toLocaleString()} coins** အနိုင်ရရှိပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** ရှိသွားပါပြီ!`);
+          .setDescription(`🔥 **BLACKJACK!** **+${profit.toLocaleString()} coins** အနိုင်ရရှိပါတယ်!`);
         return message.reply({ embeds: [bjEmbed] });
       }
 
@@ -852,10 +849,9 @@ client.on('messageCreate', async (message) => {
 
           if (newTotal > 21) {
             collector.stop('bust');
-            const freshUser = await getUser(message.author.id, message.author.username);
             return i.update({
               embeds: [buildGameEmbed(
-                `💥 **BUST! (${newTotal} မှတ် — 21 ကျော်သွားပါပြီ)**\n💸 **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။ လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**`,
+                `💥 **BUST! (${newTotal} မှတ် — 21 ကျော်သွားပါပြီ)**\n💸 **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။`,
                 '#E74C3C',
                 true
               )],
@@ -896,7 +892,7 @@ client.on('messageCreate', async (message) => {
           const winReason = finalDealer > 21 ? `Dealer Bust (${finalDealer}) ဖြစ်သွားပါတယ်!` : `${finalPlayer} ဖြင့် Dealer (${finalDealer}) ကို အနိုင်ရပါတယ်!`;
           return gameMsg.edit({
             embeds: [buildGameEmbed(
-              `🎉 **အနိုင်ရရှိပါတယ်!** ${winReason}\n💰 **+${bet.toLocaleString()} coins** ရရှိပြီး လက်ကျန် **${freshUser.balance.toLocaleString()} coins** ရှိသွားပါပြီ!`,
+              `🎉 **အနိုင်ရရှိပါတယ်!** ${winReason}\n💰 **+${bet.toLocaleString()} coins** ရရှိပါတယ်!`,
               '#2ECC71',
               true
             )],
@@ -907,7 +903,7 @@ client.on('messageCreate', async (message) => {
           await freshUser.save();
           return gameMsg.edit({
             embeds: [buildGameEmbed(
-              `🛡️ **သရေကျပါတယ် (Push)!** နှစ်ဖက်လုံး **${finalPlayer}** မှတ် တူနေသဖြင့် အရင်းပြန်ရပါတယ်။ (လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**)`,
+              `🛡️ **သရေကျပါတယ် (Push)!** နှစ်ဖက်လုံး **${finalPlayer}** မှတ် တူနေသဖြင့် အရင်းပြန်ရပါတယ်။`,
               '#95A5A6',
               true
             )],
@@ -917,7 +913,7 @@ client.on('messageCreate', async (message) => {
           const timeoutNote = reason === 'time' ? '*(အချိန်စေ့သွားသဖြင့် အလိုအလျောက် Stand လုပ်လိုက်ပါသည်)*\n' : '';
           return gameMsg.edit({
             embeds: [buildGameEmbed(
-              `${timeoutNote}💸 **ရှုံးသွားပါတယ်!** Dealer က **${finalDealer}** မှတ်ဖြင့် အနိုင်ရသွားပါတယ်။ (**-${bet.toLocaleString()} coins** | လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**)`,
+              `${timeoutNote}💸 **ရှုံးသွားပါတယ်!** Dealer က **${finalDealer}** မှတ်ဖြင့် အနိုင်ရသွားပါတယ်။ (**-${bet.toLocaleString()} coins**)`,
               '#E74C3C',
               true
             )],
@@ -970,7 +966,7 @@ client.on('messageCreate', async (message) => {
       if (roll < 0.45) {
         const coinsWon = Math.floor(Math.random() * 2001) + 500;
         user.balance += coinsWon;
-        rewardMessage = `💰 ရွှေဒင်္ဂါး **+${coinsWon.toLocaleString()} coins** ရရှိပါတယ်! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`;
+        rewardMessage = `💰 ရွှေဒင်္ဂါး **+${coinsWon.toLocaleString()} coins** ရရှိပါတယ်!`;
       } else if (roll < 0.75) {
         const expWon = Math.floor(Math.random() * 101) + 50;
         const isLevelUp = addExp(user, expWon);
@@ -1001,7 +997,7 @@ client.on('messageCreate', async (message) => {
           { name: '🏹 Hunting & Box', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksellall`, `Kopen` (`Kbox`)' },
           { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`) သို့မဟုတ် `Kbattle @user`' },
-          { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Kclick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
+          { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
           { name: '📈 Level & Profile', value: '`Kprofile`, `Klvl`, `Klevel`' }
         )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
@@ -1161,18 +1157,17 @@ client.on('messageCreate', async (message) => {
         .addFields(
           { name: '🏅 Level', value: `**Level ${user.level}**`, inline: true },
           { name: '✨ EXP', value: `**${user.exp} / ${neededExp} EXP**`, inline: true },
-          { name: '💰 လက်ကျန်ငွေ', value: `**${user.balance.toLocaleString()} coins**`, inline: true },
           { name: '🔥 Daily Streak', value: `**${user.dailyStreak || 0} ရက်**`, inline: true },
           { name: '🎁 Mystery Boxes', value: `**${user.boxes || 0} လုံး**`, inline: true },
           { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `**${(user.items || []).length} မျိုး**`, inline: true },
           { name: '📊 Level တက်ရန် တိုးတက်မှု', value: `${progressBar} (${Math.floor((user.exp / neededExp) * 100)}%)` }
         )
-        .setFooter({ text: 'EXP ရရှိရန် Kbattle ကို ကစားပါ' });
+        .setFooter({ text: 'လက်ကျန်ငွေ စစ်ဆေးရန် Kcash ကို ရိုက်ပါ' });
 
       return message.reply({ embeds: [profileEmbed] });
     }
 
-    // ၁၇။ Action Commands (Khug, Kpat, Kslap, Kkiss, Kcuddle, Kpoke, Kpunch)
+    // ၁၇။ Action Commands ၂၂ မျိုး
     if (ACTIONS[command]) {
       const target = message.mentions.users.first();
       if (!target) {
