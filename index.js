@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mongoose = require('mongoose');
 const http = require('http');
 
@@ -677,6 +677,226 @@ client.on('messageCreate', async (message) => {
 
       return message.reply({ embeds: [shopEmbed] });
     }
+    // Blackjack ဖဲကစားခြင်း (Kbj / Kblackjack - Button စနစ် | 'all' Max 250,000)
+    if (command === 'bj' || command === 'blackjack') {
+      if (activeBlackjack.has(message.author.id)) {
+        return message.reply('🃏 သင်သည် Blackjack ကစားနေဆဲ ဖြစ်ပါတယ်! အပေါ်က Message မှ ခလုတ်ကို နှိပ်ပြီး အရင်ပြီးအောင် ဆော့ပါ။');
+      }
+
+      const MAX_BET = 250000;
+      const bet = args[0]?.toLowerCase() === 'all'
+        ? Math.min(user.balance, MAX_BET)
+        : Math.min(parseInt(args[0]), MAX_BET);
+
+      if (isNaN(bet) || bet <= 0) {
+        return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kbj 1000` သို့မဟုတ် `Kbj all`)');
+      }
+      if (bet > user.balance) {
+        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+      }
+
+      // ဖဲထုပ် ၅၂ ချပ် တည်ဆောက်ပြီး မွှေခြင်း
+      const suits = ['♠️', '♥️', '♦️', '♣️'];
+      const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+      const deck = [];
+      for (const suit of suits) {
+        for (const rank of ranks) {
+          deck.push({ suit, rank });
+        }
+      }
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+
+      const calcHand = (hand) => {
+        let total = 0;
+        let aces = 0;
+        for (const card of hand) {
+          if (card.rank === 'A') {
+            aces += 1;
+            total += 11;
+          } else if (['K', 'Q', 'J'].includes(card.rank)) {
+            total += 10;
+          } else {
+            total += parseInt(card.rank);
+          }
+        }
+        while (total > 21 && aces > 0) {
+          total -= 10;
+          aces -= 1;
+        }
+        return total;
+      };
+
+      const formatHand = (hand, hideSecond = false) => {
+        if (hideSecond) {
+          return `\`[ ${hand[0].rank}${hand[0].suit} ]\` \`[ ❓ ]\``;
+        }
+        return hand.map((c) => `\`[ ${c.rank}${c.suit} ]\``).join(' ');
+      };
+
+      // လောင်းကြေး ကြိုတင်နုတ်ယူထားခြင်း
+      user.balance -= bet;
+      await user.save();
+
+      const playerHand = [deck.pop(), deck.pop()];
+      const dealerHand = [deck.pop(), deck.pop()];
+      const playerTotal = calcHand(playerHand);
+      const dealerTotal = calcHand(dealerHand);
+
+      // ပထမ ၂ ချပ်တည်းဖြင့် 21 (Natural Blackjack) ကျခြင်း စစ်ဆေးခြင်း
+      if (playerTotal === 21) {
+        if (dealerTotal === 21) {
+          user.balance += bet;
+          await user.save();
+          const pushEmbed = new EmbedBuilder()
+            .setColor('#95A5A6')
+            .setTitle(`🃏 Blackjack — သရေကျပါသည် (Push)!`)
+            .addFields(
+              { name: `🧑 ${message.author.username} (21)`, value: formatHand(playerHand), inline: true },
+              { name: `🤖 Dealer (21)`, value: formatHand(dealerHand), inline: true }
+            )
+            .setDescription(`နှစ်ဖက်လုံး Blackjack ကျသဖြင့် လောင်းကြေး **${bet.toLocaleString()} coins** အရင်းပြန်ရပါတယ်။`);
+          return message.reply({ embeds: [pushEmbed] });
+        }
+
+        const payout = Math.floor(bet * 2.5);
+        const profit = payout - bet;
+        user.balance += payout;
+        await user.save();
+
+        const bjEmbed = new EmbedBuilder()
+          .setColor('#FFD700')
+          .setTitle(`🃏 BLACKJACK! (1.5x WIN)`)
+          .addFields(
+            { name: `🧑 ${message.author.username} (21)`, value: formatHand(playerHand), inline: true },
+            { name: `🤖 Dealer (${dealerTotal})`, value: formatHand(dealerHand), inline: true }
+          )
+          .setDescription(`🔥 **BLACKJACK!** **+${profit.toLocaleString()} coins** အနိုင်ရရှိပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** ရှိသွားပါပြီ!`);
+        return message.reply({ embeds: [bjEmbed] });
+      }
+
+      activeBlackjack.add(message.author.id);
+
+      const buildGameEmbed = (statusText, color = '#2B2D31', revealDealer = false) => {
+        const pScore = calcHand(playerHand);
+        const dScore = revealDealer ? calcHand(dealerHand) : '?';
+        return new EmbedBuilder()
+          .setColor(color)
+          .setTitle(`🃏 ${message.author.username} ၏ Blackjack (လောင်းကြေး: ${bet.toLocaleString()} coins)`)
+          .addFields(
+            { name: `🧑 သင့်ဖဲ (${pScore})`, value: formatHand(playerHand), inline: true },
+            { name: `🤖 Dealer (${dScore})`, value: formatHand(dealerHand, !revealDealer), inline: true }
+          )
+          .setDescription(statusText);
+      };
+
+      // Hit နှင့် Stand ခလုတ် ၂ ခု တည်ဆောက်ခြင်း
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('bj_hit')
+          .setLabel('🃏 Hit (ထပ်ဆွဲမည်)')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('bj_stand')
+          .setLabel('🛑 Stand (ရပ်မည်)')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      const gameMsg = await message.reply({
+        embeds: [buildGameEmbed('အောက်ပါ ခလုတ်များကို နှိပ်၍ ကစားပါ *(၃၀ စက္ကန့်အတွင်း)*')],
+        components: [row]
+      });
+
+      const collector = gameMsg.createMessageComponentCollector({ time: 30000 });
+
+      collector.on('collect', async (i) => {
+        if (i.user.id !== message.author.id) {
+          return i.reply({ content: '❌ ဒါက သင့်ရဲ့ Blackjack ပွဲမဟုတ်ပါဘူး!', ephemeral: true });
+        }
+
+        if (i.customId === 'bj_hit') {
+          playerHand.push(deck.pop());
+          const newTotal = calcHand(playerHand);
+
+          if (newTotal > 21) {
+            collector.stop('bust');
+            const freshUser = await getUser(message.author.id, message.author.username);
+            return i.update({
+              embeds: [buildGameEmbed(
+                `💥 **BUST! (${newTotal} မှတ် — 21 ကျော်သွားပါပြီ)**\n💸 **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။ လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**`,
+                '#E74C3C',
+                true
+              )],
+              components: []
+            });
+          }
+
+          if (newTotal === 21) {
+            await i.deferUpdate();
+            collector.stop('stand');
+          } else {
+            await i.update({
+              embeds: [buildGameEmbed('အောက်ပါ ခလုတ်များကို နှိပ်၍ ဆက်ကစားပါ')],
+              components: [row]
+            });
+          }
+        } else if (i.customId === 'bj_stand') {
+          await i.deferUpdate();
+          collector.stop('stand');
+        }
+      });
+
+      collector.on('end', async (_, reason) => {
+        activeBlackjack.delete(message.author.id);
+        if (reason === 'bust') return;
+
+        // Dealer 17 မှတ် မပြည့်မချင်း ဖဲဆွဲမည်
+        while (calcHand(dealerHand) < 17) {
+          dealerHand.push(deck.pop());
+        }
+
+        const finalPlayer = calcHand(playerHand);
+        const finalDealer = calcHand(dealerHand);
+        const freshUser = await getUser(message.author.id, message.author.username);
+
+        if (finalDealer > 21 || finalPlayer > finalDealer) {
+          freshUser.balance += bet * 2;
+          await freshUser.save();
+          const winReason = finalDealer > 21 ? `Dealer Bust (${finalDealer}) ဖြစ်သွားပါတယ်!` : `${finalPlayer} ဖြင့် Dealer (${finalDealer}) ကို အနိုင်ရပါတယ်!`;
+          return gameMsg.edit({
+            embeds: [buildGameEmbed(
+              `🎉 **အနိုင်ရရှိပါတယ်!** ${winReason}\n💰 **+${bet.toLocaleString()} coins** ရရှိပြီး လက်ကျန် **${freshUser.balance.toLocaleString()} coins** ရှိသွားပါပြီ!`,
+              '#2ECC71',
+              true
+            )],
+            components: []
+          });
+        } else if (finalPlayer === finalDealer) {
+          freshUser.balance += bet;
+          await freshUser.save();
+          return gameMsg.edit({
+            embeds: [buildGameEmbed(
+              `🛡️ **သရေကျပါတယ် (Push)!** နှစ်ဖက်လုံး **${finalPlayer}** မှတ် တူနေသဖြင့် အရင်းပြန်ရပါတယ်။ (လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**)`,
+              '#95A5A6',
+              true
+            )],
+            components: []
+          });
+        } else {
+          const timeoutNote = reason === 'time' ? '*(အချိန်စေ့သွားသဖြင့် အလိုအလျောက် Stand လုပ်လိုက်ပါသည်)*\n' : '';
+          return gameMsg.edit({
+            embeds: [buildGameEmbed(
+              `${timeoutNote}💸 **ရှုံးသွားပါတယ်!** Dealer က **${finalDealer}** မှတ်ဖြင့် အနိုင်ရသွားပါတယ်။ (**-${bet.toLocaleString()} coins** | လက်ကျန်: **${freshUser.balance.toLocaleString()} coins**)`,
+              '#E74C3C',
+              true
+            )],
+            components: []
+          });
+        }
+      });
+    }
 
     // ၁၂။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id>)
     if (command === 'buy') {
@@ -750,7 +970,7 @@ client.on('messageCreate', async (message) => {
         .addFields(
           { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kgive @user <amount>`, `Ktop`' },
           { name: '🏹 Hunting & Box', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksellall`, `Kopen` (`Kbox`)' },
-          { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`' },
+          { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbowl <amount/all>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`) သို့မဟုတ် `Kbattle @user`' },
           { name: '📈 Level & Profile', value: '`Kprofile`, `Klvl`, `Klevel`' }
            )
