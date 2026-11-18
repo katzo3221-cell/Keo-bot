@@ -159,7 +159,7 @@ client.on('messageCreate', async (message) => {
   const validCommands = [
     'cash', 'bal', 'daily', 'work', 'give', 'top', 'lb',
     'hunt', 'h', 'zoo', 'z', 'sellall', 'cf', 'coinflip',
-    'slots', 'shop', 'buy', 'box', 'open', 'help',
+    's', 'slots', 'shop', 'buy', 'box', 'open', 'help',
     'battle', 'b', 'profile', 'lvl', 'level'
   ];
   if (!validCommands.includes(command)) return;
