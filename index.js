@@ -160,7 +160,7 @@ client.on('messageCreate', async (message) => {
     'cash', 'bal', 'daily', 'work', 'give', 'top', 'lb',
     'hunt', 'h', 'zoo', 'z', 'sellall', 'cf', 'coinflip',
     's', 'slots', 'shop', 'buy', 'box', 'open', 'help',
-    'battle', 'b', 'profile', 'lvl', 'level'
+    'battle', 'b', 'd', 'dice', 'profile', 'lvl', 'level'
   ];
   if (!validCommands.includes(command)) return;
 
@@ -510,6 +510,85 @@ client.on('messageCreate', async (message) => {
         return msg.edit(`${board}\n💸 ဘာမှ မတူလို့ **-${bet.toLocaleString()} coins** ရှုံးသွားပါတယ်။ လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
       }
     }
+    // အံစာတုံး အသေး/အကြီး/လန့် ကစားခြင်း (Kd / Kdice - 'all' Max 250,000)
+    if (command === 'd' || command === 'dice') {
+      const MAX_BET = 250000;
+      const bet = args[0]?.toLowerCase() === 'all'
+        ? Math.min(user.balance, MAX_BET)
+        : Math.min(parseInt(args[0]), MAX_BET);
+
+      if (isNaN(bet) || bet <= 0) {
+        return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kd 1000 s` / `Kd all b` / `Kd 500 t`)');
+      }
+      if (bet > user.balance) {
+        return message.reply(`❌ လက်ကျန်ငွေ မလုံလောက်ပါ! (လက်ကျန်: **${user.balance.toLocaleString()} coins**)`);
+      }
+
+      const rawChoice = args[1]?.toLowerCase();
+      let choice = null;
+      if (['s', 'small', 'အသေး'].includes(rawChoice)) choice = 'small';
+      else if (['b', 'big', 'အကြီး'].includes(rawChoice)) choice = 'big';
+      else if (['t', 'triple', 'lan', 'လန့်'].includes(rawChoice)) choice = 'triple';
+
+      if (!choice) {
+        return message.reply('❌ ရွေးချယ်မှု ထည့်ပေးပါ! (`s` = အသေး | `b` = အကြီး | `t` = လန့်)\nဥပမာ - `Kd 1000 s` သို့မဟုတ် `Kd all b`');
+      }
+
+      const choiceMap = {
+        small: '🔽 အသေး (4-10)',
+        big: '🔼 အကြီး (11-17)',
+        triple: '🔥 လန့် (3 လုံးတူ)',
+      };
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const diceEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣'];
+
+      const msg = await message.reply(
+        `🎲 **${choiceMap[choice]}** ကို **${bet.toLocaleString()} coins** လောင်းပြီး အံစာခေါက်လိုက်ပါပြီ...\n` +
+        `**[ 🔄 | 🔄 | 🔄 ]** *အံစာတုံး လှိမ့်နေပါသည်...*`
+      );
+
+      await sleep(1200);
+
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      const d3 = Math.floor(Math.random() * 6) + 1;
+      const sum = d1 + d2 + d3;
+
+      const isTriple = d1 === d2 && d2 === d3;
+      let actualResult = '';
+      let resultLabel = '';
+
+      if (isTriple) {
+        actualResult = 'triple';
+        resultLabel = `🔥 လန့် (${d1}-${d2}-${d3})`;
+      } else if (sum >= 4 && sum <= 10) {
+        actualResult = 'small';
+        resultLabel = `🔽 အသေး (ပေါင်းလဒ်: ${sum})`; } else { actualResult = 'big'; resultLabel = `🔼 အကြီး (ပေါင်းလဒ်: ${sum})`;
+      }
+
+      const board = `🎲 **[ ${diceEmojis[d1 - 1]} | ${diceEmojis[d2 - 1]} \vert{}${diceEmojis[d3 - 1]} ]** ➔ **${resultLabel}**`;
+
+      if (choice === actualResult) {
+        const multiplier = choice === 'triple' ? 20 : 1;
+        const winnings = bet * multiplier;
+        user.balance += winnings;
+        await user.save();
+
+        const tripleNote = choice === 'triple' ? ' (**20x JACKPOT!**)' : '';
+        return msg.edit(
+          `${board}\n🎉 **အနိုင်ရရှိပါတယ်!**${tripleNote} **+${winnings.toLocaleString()} coins** ရရှိပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** ရှိသွားပါပြီ။`
+        );
+      } else {
+        user.balance -= bet;
+        await user.save();
+
+        const lanLossNote = isTriple && choice !== 'triple' ? ' *(လန့် ကျသွားသဖြင့် အသေး/အကြီး ရှုံးပါသည်)*' : '';
+        return msg.edit(
+          `${board}\n💸 **ရှုံးသွားပါတယ်!**${lanLossNote} **-${bet.toLocaleString()} coins** ဆုံးရှုံးပြီး လက်ကျန် **${user.balance.toLocaleString()} coins** သာ ကျန်ပါတော့တယ်။`
+        );
+      }
+    }
 
     // ၁၁။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop)
     if (command === 'shop') {
@@ -601,10 +680,10 @@ client.on('messageCreate', async (message) => {
         .addFields(
           { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kgive @user <amount>`, `Ktop`' },
           { name: '🏹 Hunting & Box', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksellall`, `Kopen` (`Kbox`)' },
-          { name: '🎲 Gambling (ကံစမ်းမဲ)', value: '`Kcf <amount/all> [heads/tails]`, `Kslots <amount/all>`' },
+          { name: '🎲 Gambling (ကံစမ်းမဲ)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`) သို့မဟုတ် `Kbattle @user`' },
           { name: '📈 Level & Profile', value: '`Kprofile`, `Klvl`, `Klevel`' }
-        )
+           )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 
       return message.reply({ embeds: [helpEmbed] });
