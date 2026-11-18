@@ -233,4 +233,41 @@ module.exports = [
       }
     },
   },
+
+  // ၈။ ပိုင်ဆိုင်သော ပစ္စည်းများ စစ်ဆေးခြင်း (Kinv / Kinventory / Kbag)
+  {
+    names: ['inv', 'inventory', 'bag'],
+    async execute(message, args, user) {
+      const ownedIds = user.items || [];
+      const boxCount = user.boxes || 0;
+      const lines = [];
+
+      if (boxCount > 0) {
+        lines.push(`🎁 **လျှို့ဝှက်သေတ္တာ (Mystery Box)** — **${boxCount} လုံး** *(\`Kopen\` ဖြင့် ဖွင့်ပါ)*`);
+      }
+
+      for (const id of ownedIds) {
+        const itemInfo = SHOP_ITEMS.find((i) => i.id === id);
+        if (itemInfo) {
+          const left = (user.itemUses && user.itemUses[id] !== undefined)
+            ? user.itemUses[id]
+            : itemInfo.maxUses;
+          lines.push(`🛠️ **${itemInfo.name}** (\`${itemInfo.id}\`) — ကျန်ရှိအကြိမ်: **${left}/${itemInfo.maxUses} ကြိမ်**`);
+        }
+      }
+
+      if (lines.length === 0) {
+        return message.reply('🎒 သင့်ကျောပိုးအိတ် (Inventory) ထဲမှာ ဘာပစ္စည်းမှ မရှိသေးပါဘူး! `Kshop` မှာ ဝင်ရောက်ဝယ်ယူနိုင်ပါတယ်။');
+      }
+
+      const invEmbed = new EmbedBuilder()
+        .setColor('#1ABC9C')
+        .setAuthor({ name: `${message.author.username} ၏ ကျောပိုးအိတ် (Inventory)`, iconURL: message.author.displayAvatarURL() })
+        .setDescription(lines.join('\n\n'))
+        .setFooter({ text: 'ပစ္စည်းအသစ် ထပ်ဝယ်ရန် Kshop ကို ရိုက်ပါ' })
+        .setTimestamp();
+
+      return message.reply({ embeds: [invEmbed] });
+    },
+  },
 ];
