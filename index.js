@@ -106,7 +106,7 @@ const ANIMALS = [
   { name: 'ဆင်ပြောင်ကြီး (Legendary)', emoji: '🐘', price: 13000, chance: 0.3 },
   { name: 'ကြံ့သူတော် (Legendary)', emoji: '🦏', price: 16000, chance: 0.15 },
   { name: 'ယူနီကွန်း (Mythical)', emoji: '🦄', price: 25000, chance: 0.1 },
-  { name: 'နဂါးမင်း (Mythical)', emoji: '🐉', price: 50000, chance: 0.05 },
+  { name: 'နဂါးမင်း (Mythical)', emoji: '🐉', price: 30000, chance: 0.05 },
 ];
 
 // ဆိုင်တွင် ဝယ်ယူနိုင်သော ပစ္စည်းများ (အကြိမ်ရေ Limit ပါဝင်သည်)
