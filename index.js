@@ -191,7 +191,8 @@ client.on('messageCreate', async (message) => {
     'cash', 'bal', 'daily', 'work', 'give', 'top', 'lb',
     'hunt', 'h', 'zoo', 'z', 'sellall', 'cf', 'coinflip',
     's', 'slots', 'shop', 'buy', 'box', 'open', 'help',
-    'battle', 'b', 'd', 'dice', 'profile', 'lvl', 'level'
+    'battle', 'b', 'd', 'dice', 'profile', 'lvl', 'level',
+    'obj', 'item', 'use', 'inv', 'inventory', 'reset', 'clear',
   ];
   if (!validCommands.includes(command)) return;
 
