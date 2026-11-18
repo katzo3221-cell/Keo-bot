@@ -567,7 +567,7 @@ client.on('messageCreate', async (message) => {
         resultLabel = `🔽 အသေး (ပေါင်းလဒ်: ${sum})`; } else { actualResult = 'big'; resultLabel = `🔼 အကြီး (ပေါင်းလဒ်: ${sum})`;
       }
 
-      const board = `🎲 **[ ${diceEmojis[d1 - 1]} | ${diceEmojis[d2 - 1]} \vert{}${diceEmojis[d3 - 1]} ]** ➔ **${resultLabel}**`;
+      const board = `🎲 **[ ${diceEmojis[d1 - 1]} | ${diceEmojis[d2 - 1]} | ${diceEmojis[d3 - 1]} ]** ➔ **${resultLabel}**`;
 
       if (choice === actualResult) {
         const multiplier = choice === 'triple' ? 20 : 1;
