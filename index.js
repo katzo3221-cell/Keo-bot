@@ -420,9 +420,9 @@ client.on('messageCreate', async (message) => {
       return message.reply(`💵 ဖမ်းထားသော တိရစ္ဆာန်အားလုံးကို ရောင်းချလိုက်ရာ **+${totalEarned.toLocaleString()} coins** ရရှိပါပြီ! စုစုပေါင်း လက်ကျန်: **${user.balance.toLocaleString()} coins**`);
     }
 
-    // ၉။ Coinflip ကစားခြင်း (Kcf / Kcoinflip - 'all' Max 500,000)
+    // ၉။ Coinflip ကစားခြင်း (Kcf / Kcoinflip - 'all' Max 250,000)
     if (command === 'cf' || command === 'coinflip') {
-      const MAX_BET = 500000;
+      const MAX_BET = 250000;
       const bet = args[0]?.toLowerCase() === 'all'
         ? Math.min(user.balance, MAX_BET)
         : Math.min(parseInt(args[0]), MAX_BET);
@@ -460,9 +460,9 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // ၁၀။ Slots ကစားခြင်း (Kslots - 'all' Max 500,000)
+    // ၁၀။ Slots ကစားခြင်း (Ks / Kslots - 'all' Max 250,000)
     if (command === 's' || command === 'slots') {
-      const MAX_BET = 500000;
+      const MAX_BET = 250000;
       const bet = args[0]?.toLowerCase() === 'all'
         ? Math.min(user.balance, MAX_BET)
         : Math.min(parseInt(args[0]), MAX_BET);
