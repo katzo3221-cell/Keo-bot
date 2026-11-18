@@ -1,0 +1,27 @@
+// Action Command ၂၂ မျိုးလုံး အချက်အလက် (OwO Style)
+const ACTIONS = {
+  cuddle: { nekos: 'cuddle', waifu: 'cuddle', title: '💞 ချစ်ခင်စွာ ပွေ့ဖက်လိုက်ပါပြီ!', actionText: 'ကို ရင်ခွင်ထဲ ထည့်ပြီး ပွေ့ဖက်ထားပါတယ်!', countLabel: 'ပွေ့ဖက်ပြီးပါပြီ 🌸', color: '#FF85A2', fallbackGif: 'https://nekos.best/api/v2/cuddle/001.gif' },
+  hug: { nekos: 'hug', waifu: 'hug', title: '🤗 နွေးထွေးစွာ ဖက်လိုက်ပါပြီ!', actionText: 'ကို တင်းတင်းကျပ်ကျပ် ဖက်လိုက်ပါတယ်!', countLabel: 'ဖက်ပြီးပါပြီ ❤️', color: '#FF69B4', fallbackGif: 'https://nekos.best/api/v2/hug/001.gif' },
+  kiss: { nekos: 'kiss', waifu: 'kiss', title: '😘 ချစ်စနိုးနဲ့ နမ်းလိုက်ပါပြီ!', actionText: 'ကို ကြင်ကြင်နာနာ နမ်းလိုက်ပါတယ်!', countLabel: 'နမ်းပြီးပါပြီ 💕', color: '#E91E63', fallbackGif: 'https://nekos.best/api/v2/kiss/001.gif' },
+  lick: { waifu: 'lick', title: '👅 လျှာနဲ့ လျက်လိုက်ပါပြီ!', actionText: 'ကို ရုတ်တရက် လျှာနဲ့ လျက်လိုက်ပါတယ်!', countLabel: 'လျက်ပြီးပါပြီ 😋', color: '#FF7043', fallbackGif: 'https://nekos.best/api/v2/nom/001.gif' },
+  nom: { nekos: 'nom', waifu: 'nom', title: '🍪 အားရပါးရ ကိုက်စားလိုက်ပါပြီ!', actionText: 'ကို မုန့်လေးလို ငုံပြီး ကိုက်လိုက်ပါတယ်!', countLabel: 'ကိုက်စားပြီးပါပြီ 🍩', color: '#FFA726', fallbackGif: 'https://nekos.best/api/v2/nom/001.gif' },
+  pat: { nekos: 'pat', waifu: 'pat', title: '🥰 ခေါင်းလေး ပုတ်ပေးလိုက်ပါပြီ!', actionText: 'ရဲ့ ခေါင်းလေးကို ချစ်စနိုးနဲ့ ပုတ်ပေးလိုက်ပါတယ်!', countLabel: 'ခေါင်းပုတ်ပြီးပါပြီ ✨', color: '#F1C40F', fallbackGif: 'https://nekos.best/api/v2/pat/001.gif' },
+  pats: { nekos: 'pat', waifu: 'pat', title: '🥰 ခေါင်းလေး ပုတ်ပေးလိုက်ပါပြီ!', actionText: 'ရဲ့ ခေါင်းလေးကို ညင်ညင်သာသာ ပုတ်ပေးလိုက်ပါတယ်!', countLabel: 'ခေါင်းပုတ်ပြီးပါပြီ ✨', color: '#F1C40F', fallbackGif: 'https://nekos.best/api/v2/pat/001.gif' },
+  poke: { nekos: 'poke', waifu: 'poke', title: '👉 စနောက်ပြီး တို့လိုက်ပါပြီ!', actionText: 'ကို စချင်လို့ လက်ညှိုးနဲ့ တို့လိုက်ပါတယ်!', countLabel: 'တို့ပြီးပါပြီ 👀', color: '#3498DB', fallbackGif: 'https://nekos.best/api/v2/poke/001.gif' },
+  slap: { nekos: 'slap', waifu: 'slap', title: '🖐️ ဖြန်းခနဲ ပါးရိုက်လိုက်ပါပြီ!', actionText: 'ကို အားရပါးရ ပါးရိုက်ချလိုက်ပါတယ်!', countLabel: 'ပါးရိုက်ပြီးပါပြီ 💥', color: '#E74C3C', fallbackGif: 'https://nekos.best/api/v2/slap/001.gif' },
+  stare: { nekos: 'stare', title: '👀 စူးစူးစိုက်စိုက် စိုက်ကြည့်နေပါပြီ!', actionText: 'ကို မျက်တောင်မခတ်ဘဲ စိုက်ကြည့်နေပါတယ်!', countLabel: 'စိုက်ကြည့်ပြီးပါပြီ 👁️', color: '#9B59B6', fallbackGif: 'https://nekos.best/api/v2/stare/001.gif' },
+  highfive: { nekos: 'highfive', waifu: 'highfive', title: '🙌 လက်ဝါးချင်း ရိုက်လိုက်ပါပြီ!', actionText: 'နဲ့ အားရပါးရ High-Five လုပ်လိုက်ပါတယ်!', countLabel: 'High-Five လုပ်ပြီးပါပြီ ⭐', color: '#2ECC71', fallbackGif: 'https://nekos.best/api/v2/highfive/001.gif' },
+  bite: { nekos: 'bite', waifu: 'bite', title: '😬 ဂျွတ်ခနဲ ကိုက်ချလိုက်ပါပြီ!', actionText: 'ကို နာနာလေး ကိုက်ချလိုက်ပါတယ်!', countLabel: 'ကိုက်ပြီးပါပြီ 🦷', color: '#E67E22', fallbackGif: 'https://nekos.best/api/v2/bite/001.gif' },
+  greet: { nekos: 'wave', waifu: 'wave', title: '👋 ဝမ်းသာအားရ နှုတ်ဆက်လိုက်ပါပြီ!', actionText: 'ကို လက်ပြပြီး နှုတ်ဆက်လိုက်ပါတယ်!', countLabel: 'နှုတ်ဆက်ပြီးပါပြီ 😊', color: '#1ABC9C', fallbackGif: 'https://nekos.best/api/v2/wave/001.gif' },
+  punch: { nekos: 'punch', title: '👊 ပြင်းပြင်းထန်ထန် ထိုးချလိုက်ပါပြီ!', actionText: 'ကို လက်သီးနဲ့ ပစ်ထိုးလိုက်ပါတယ်!', countLabel: 'ထိုးပြီးပါပြီ 🔥', color: '#C0392B', fallbackGif: 'https://nekos.best/api/v2/punch/001.gif' },
+  handholding: { nekos: 'handhold', waifu: 'handhold', title: '🤝 လက်ကလေး ကိုင်ထားလိုက်ပါပြီ!', actionText: 'ရဲ့ လက်ကလေးကို နွေးနွေးထွေးထွေး ကိုင်ထားလိုက်ပါတယ်!', countLabel: 'လက်ကိုင်ပြီးပါပြီ 💖', color: '#FF80AB', fallbackGif: 'https://nekos.best/api/v2/handhold/001.gif' },
+  tickle: { nekos: 'tickle', title: '🤣 ကလိထိုးလိုက်ပါပြီ!', actionText: 'ကို ရယ်မောသွားအောင် ကလိထိုးလိုက်ပါတယ်!', countLabel: 'ကလိထိုးပြီးပါပြီ 😆', color: '#FFCA28', fallbackGif: 'https://nekos.best/api/v2/tickle/001.gif' },
+  kill: { waifu: 'kill', nekos: 'shoot', title: '💀 အပြတ်ရှင်းပစ်လိုက်ပါပြီ!', actionText: 'ကို ဂိမ်းထဲမှာ အပြတ်ရှင်းပစ်လိုက်ပါတယ်!', countLabel: 'ရှင်းပစ်ပြီးပါပြီ ⚔️', color: '#2C3E50', fallbackGif: 'https://nekos.best/api/v2/shoot/001.gif' },
+  hold: { nekos: 'handhold', waifu: 'cuddle', title: '🫂 တင်းတင်းကျပ်ကျပ် ဖက်တွယ်ထားပါပြီ!', actionText: 'ကို မလွတ်တမ်း ဖက်တွယ်ထားလိုက်ပါတယ်!', countLabel: 'ဖက်တွယ်ပြီးပါပြီ 💗', color: '#F06292', fallbackGif: 'https://nekos.best/api/v2/cuddle/001.gif' },
+  wave: { nekos: 'wave', waifu: 'wave', title: '👋 လက်ဝှေ့ယမ်းပြလိုက်ပါပြီ!', actionText: 'ဆီကို လက်ဝှေ့ယမ်းပြလိုက်ပါတယ်!', countLabel: 'လက်ပြပြီးပါပြီ 🌟', color: '#29B6F6', fallbackGif: 'https://nekos.best/api/v2/wave/001.gif' },
+  boop: { nekos: 'poke', waifu: 'poke', title: '👃 နှာခေါင်းလေးကို တို့လိုက်ပါပြီ!', actionText: 'ရဲ့ နှာခေါင်းလေးကို ချစ်စနိုးနဲ့ Boop လုပ်လိုက်ပါတယ်!', countLabel: 'Boop လုပ်ပြီးပါပြီ 🐾', color: '#AB47BC', fallbackGif: 'https://nekos.best/api/v2/poke/001.gif' },
+  snuggle: { nekos: 'cuddle', waifu: 'glomp', title: '🧸 ချစ်စဖွယ် တိုးဝှေ့ဖက်လိုက်ပါပြီ!', actionText: 'နားကို တိုးဝှေ့ပြီး ချစ်ခင်စွာ ဖက်လိုက်ပါတယ်!', countLabel: 'တိုးဝှေ့ဖက်ပြီးပါပြီ 💓', color: '#EC407A', fallbackGif: 'https://nekos.best/api/v2/cuddle/001.gif' },
+  bully: { waifu: 'bully', nekos: 'smug', title: '😈 အနိုင်ကျင့် စနောက်လိုက်ပါပြီ!', actionText: 'ကို ဆိုးဆိုးဝါးဝါး စနောက်အနိုင်ကျင့်လိုက်ပါတယ်!', countLabel: 'အနိုင်ကျင့်ပြီးပါပြီ 😜', color: '#8E44AD', fallbackGif: 'https://nekos.best/api/v2/smug/001.gif' },
+};
+
+module.exports = ACTIONS;
