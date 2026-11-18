@@ -13,6 +13,7 @@ const client = new Client({
 
 // Anti-Spam Cooldown Map
 const cooldowns = new Map();
+const activeBlackjack = new Set();
 
 // MongoDB Cloud Database ချိတ်ဆက်ခြင်း
 mongoose.connect(process.env.MONGO_URI)
@@ -193,6 +194,7 @@ client.on('messageCreate', async (message) => {
     's', 'slots', 'shop', 'buy', 'box', 'open', 'help',
     'battle', 'b', 'd', 'dice', 'profile', 'lvl', 'level',
     'obj', 'item', 'use', 'inv', 'inventory', 'reset', 'clear',
+    'bj', 'blackjack',
   ];
   if (!validCommands.includes(command)) return;
 
