@@ -17,8 +17,13 @@ const userSchema = new mongoose.Schema({
   lastWork: { type: Number, default: 0 },
   zoo: { type: Object, default: {} },
   battleTeam: { type: [String], default: [] },
+
+  // လက်ရှိ တပ်ဆင်အသုံးပြုနေသော Item များ (တစ်မျိုးလျှင် ၁ ခုသာ) နှင့် ကျန်ရှိအကြိမ်ရေ
   items: { type: [String], default: [] },
   itemUses: { type: Object, default: {} },
+  // Drop မှ အပိုရထားပြီး အိတ်ထဲတွင် သိမ်းထားသော Item များ ({ itemId: count })
+  storedItems: { type: Object, default: {} },
+
   dailyHuntItemCount: { type: Number, default: 0 },
   dailyHuntItemDate: { type: String, default: '' },
   huntCount: { type: Number, default: 0 },
@@ -108,7 +113,7 @@ function addProfileExp(user, amount) {
     user.boxes = (user.boxes || 0) + totalRewardCrates;
     levelUpText =
       `\n🎊 **PROFILE LEVEL UP!** သင်သည် **Profile Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!\n` +
-      `🎁 Level ဆုလက်ဆောင်: **+${totalRewardCoins.toLocaleString()} coins** နှင့် **Lucky Crate +${totalRewardCrates} လုံး** ရရှိပါတယ်!`;
+      `🎁 Level ဆုလက်ဆောင်: **+${totalRewardCoins.toLocaleString()} coins** နှင့် **Lucky Crate (\`lc\`) +${totalRewardCrates} လုံး** ရရှိပါတယ်!`;
   }
 
   return {

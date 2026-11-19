@@ -5,9 +5,9 @@ const {
   ITEM_RANKS,
   SHOP_ITEMS,
   rollRandomItem,
-  grantItemToUser,
-  getActiveHuntItem,
-  consumeSingleItem,
+  receiveDroppedItem,
+  getActiveHuntItems,
+  consumeActiveHuntItems,
 } = require('../data/shopItems');
 
 // Rank ၁၀ ဆင့်နှင့် Emoji အတိုလေးများ
@@ -149,25 +149,27 @@ module.exports = [
 
       user.balance -= cost;
 
-      const activeHuntItem = getActiveHuntItem(user);
-      const totalLuck = activeHuntItem ? activeHuntItem.luckBonus : 0;
-      const extraCatch = activeHuntItem ? activeHuntItem.extraCatch : 0;
-      const catchMultiplier = activeHuntItem ? activeHuntItem.catchMultiplier : 1;
-      const catchCount = (1 + extraCatch) * catchMultiplier;
+      // တပ်ဆင်ထားသော Item ၃ မျိုး (luck, extra, multiplier) မှ စွမ်းရည်များ တွက်ချက်ခြင်း (အများဆုံး ၁၀ ကောင် မကျော်စေရ)
+      const activeItems = getActiveHuntItems(user);
+      const totalLuck = activeItems.luck ? activeItems.luck.luckBonus : 0;
+      const extraCatch = activeItems.extra ? activeItems.extra.extraCatch : 0;
+      const catchMultiplier = activeItems.multiplier ? activeItems.multiplier.catchMultiplier : 1;
+      const catchCount = Math.min((1 + extraCatch) * catchMultiplier, 10);
 
       if (!user.zoo) user.zoo = {};
       const caughtSummary = {};
 
+      // Mythical / Divine / Celestial အမြဲမမိအောင် ချိန်ညှိထားသော Weight စနစ်
       const weightedAnimals = ANIMALS.map((animal) => {
         let multiplier = 1;
         if (animal.price >= 18000) {
-          multiplier = 1 + totalLuck * 0.04;
+          multiplier = 1 + totalLuck * 0.04; // Mythical, Divine, Celestial
         } else if (animal.price >= 8000) {
-          multiplier = 1 + totalLuck * 0.045;
+          multiplier = 1 + totalLuck * 0.045; // Legendary
         } else if (animal.price >= 1000) {
-          multiplier = 1 + totalLuck * 0.035;
+          multiplier = 1 + totalLuck * 0.035; // Epic, Ultra Epic
         } else if (animal.price >= 60) {
-          multiplier = 1 + totalLuck * 0.02;
+          multiplier = 1 + totalLuck * 0.02; // Rare, Super Rare
         }
         return { animal, weight: animal.chance * multiplier };
       });
@@ -217,15 +219,19 @@ module.exports = [
       let foundItemText = '';
       if (user.dailyHuntItemCount < 3 && Math.random() < 0.15) {
         const foundItem = rollRandomItem();
-        const totalUses = grantItemToUser(user, foundItem);
+        const dropResult = receiveDroppedItem(user, foundItem);
         user.dailyHuntItemCount += 1;
         const rInfo = ITEM_RANKS[foundItem.rank];
+        const statusNote = dropResult.equipped
+          ? `*(အလိုအလျောက် တပ်ဆင်ပြီး — **${dropResult.uses} ကြိမ်**)*`
+          : `*(အိတ်ထဲ သိမ်းဆည်းပြီး — လက်ရှိ \`${dropResult.activeItem.id}\` ကုန်မှ \`Kuse ${foundItem.id}\` ဖြင့် သုံးပါ)*`;
         foundItemText =
           `\n🎒 တောထဲမှ ${rInfo.emoji} **[Rank ${foundItem.rank}] ${foundItem.name}** (\`${foundItem.id}\`) ရှာတွေ့ပါတယ်! ` +
-          `*(အသုံးပြုခွင့်: **${totalUses} ကြိမ်** | ယနေ့ Item Limit: **${user.dailyHuntItemCount}/3**)*`;
+          `${statusNote} *(ယနေ့ Limit: **${user.dailyHuntItemCount}/3**)*`;
       }
 
-      const brokenItemText = activeHuntItem ? consumeSingleItem(user, activeHuntItem.id) : '';
+      // အသုံးပြုလိုက်သော Active Item များ၏ အကြိမ်ရေကို ၁ ကြိမ်စီ လျှော့ချခြင်း
+      const brokenItemText = consumeActiveHuntItems(user, activeItems);
 
       // Profile EXP +10 (Daily Limit 3,000)
       const expRes = addProfileExp(user, 10);
@@ -427,10 +433,9 @@ module.exports = [
     async execute(message, args, user) {
       const ownedCrates = user.boxes || 0;
       if (ownedCrates <= 0) {
-        return message.reply('🎁 ဖွင့်စရာ **Lucky Crate (`lc`)** မရှိသေးပါဘူး! `Kprofile` Level တက်ခြင်း၊ ၃ ရက်ဆက် `Kdaily` Streak နှင့် `Kbattle` အောင်ပွဲများမှ ရရှိနိုင်ပါတယ်။');
+        return message.reply('🎁 ဖွင့်စရာ **Lucky Crate (`lc`)** မရှိသေးပါဘူး! `Kdaily`၊ `Kprofile` Level တက်ခြင်း နှင့် `Kbattle` အောင်ပွဲများမှ ရရှိနိုင်ပါတယ်။');
       }
 
-      // Kopen lc all / Kopen lc 5 / Kopen 5 / Kopen all ပုံစံအားလုံးကို ခွဲခြမ်းစိတ်ဖြာခြင်း
       const filteredArgs = args.filter((a) => !['lc', 'lucky', 'crate', 'crates', 'box'].includes(a.toLowerCase()));
       const qtyArg = filteredArgs[0]?.toLowerCase();
       let openCount = 1;
@@ -497,7 +502,7 @@ module.exports = [
         } else {
           // 10%: Rank 4 - 7 High-Tier Hunt Item
           const prizeItem = highRankItems[Math.floor(Math.random() * highRankItems.length)];
-          grantItemToUser(user, prizeItem);
+          receiveDroppedItem(user, prizeItem);
           if (!wonItems[prizeItem.id]) {
             const rInfo = ITEM_RANKS[prizeItem.rank];
             wonItems[prizeItem.id] = {

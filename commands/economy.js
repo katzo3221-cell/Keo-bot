@@ -2,10 +2,10 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { User, getUser, addProfileExp } = require('../models/User');
 const {
   ITEM_RANKS,
+  ITEM_TYPE_LABELS,
   SHOP_ITEMS,
   findItemById,
-  rollRandomItem,
-  grantItemToUser,
+  getActiveItemByType,
 } = require('../data/shopItems');
 
 module.exports = [
@@ -27,7 +27,7 @@ module.exports = [
     },
   },
 
-  // ၂။ နေ့စဉ် အခမဲ့ငွေ၊ Profile EXP နှင့် Random Item ၂ လုံး ထုတ်ယူခြင်း (Kdaily)
+  // ၂။ နေ့စဉ် အခမဲ့ငွေ၊ Profile EXP နှင့် Lucky Crate (lc) ၂ လုံး ထုတ်ယူခြင်း (Kdaily)
   {
     names: ['daily'],
     async execute(message, args, user) {
@@ -57,20 +57,15 @@ module.exports = [
       const streakBonus = (user.dailyStreak - 1) * 100;
       const reward = Math.min(baseReward + levelBonus + expBonus + streakBonus, MAX_DAILY);
 
-      // Daily ဆုအဖြစ် Rank 1-7 Random Item ၂ ခု ထုတ်ပေးခြင်း
-      const droppedItems = [rollRandomItem(), rollRandomItem()];
-      const droppedLines = droppedItems.map((item) => {
-        const totalUses = grantItemToUser(user, item);
-        const rInfo = ITEM_RANKS[item.rank];
-        return `${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (\`${item.id}\`) — အသုံးပြုခွင့်: **${totalUses} ကြိမ်**`;
-      });
-
-      let crateBonusText = '';
+      // Daily ဆုအဖြစ် Lucky Crate (lc) ၂ လုံး ပေးခြင်း (၃ ရက်ဆက် Streak ဆိုလျှင် +1 အပိုရမည်)
+      let dailyCrates = 2;
+      let streakBonusText = '';
       if (user.dailyStreak % 3 === 0) {
-        user.boxes = (user.boxes || 0) + 1;
-        crateBonusText = `\n🎁 **${user.dailyStreak} ရက်ဆက် Streak ဆု:** **Lucky Crate (\`lc\`) +1** အပိုရရှိပါတယ်! (\`Kopen lc\` ဖြင့်ဖွင့်ပါ)`;
+        dailyCrates += 1;
+        streakBonusText = ` *(🔥 ${user.dailyStreak} ရက်ဆက် Streak Bonus +1 အပါအဝင်)*`;
       }
 
+      user.boxes = (user.boxes || 0) + dailyCrates;
       user.balance += reward;
       user.lastDaily = now;
 
@@ -81,7 +76,7 @@ module.exports = [
       const maxNote = reward >= MAX_DAILY ? ' *(MAX)*' : '';
       return message.reply(
         `🎁 **Profile Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} နှင့် **+${expRes.addedExp} Profile EXP** ရရှိပါပြီ!\n` +
-        `🎒 **Daily Item ဆုလက်ဆောင် (၂ မျိုး):**\n${droppedLines.join('\n')}${crateBonusText}${expRes.levelUpText}`
+        `🎁 **Daily Lucky Crate (\`lc\`):** **+${dailyCrates} လုံး** ရရှိပါတယ်!${streakBonusText} *(\`Kopen lc\` ဖြင့် ဖွင့်ပါ)*${expRes.levelUpText}`
       );
     },
   },
@@ -239,37 +234,45 @@ module.exports = [
     },
   },
 
-  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop - Rank အနိမ့် ၃ မျိုးသာ ရောင်းချသည်)
+  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop - Rank 1 မှ Rank 3 အထိ ၃ မျိုး = ၉ ခု)
   {
     names: ['shop'],
     async execute(message, args, user) {
       const shopOnlyItems = SHOP_ITEMS.filter((item) => item.shopAvailable);
+      const types = ['luck', 'extra', 'multiplier'];
 
-      const shopList = shopOnlyItems.map((item) => {
-        const rInfo = ITEM_RANKS[item.rank];
-        let status = `💰 **${item.price.toLocaleString()} coins**`;
-        if ((user.items || []).includes(item.id)) {
-          const left = (user.itemUses && user.itemUses[item.id] !== undefined) ? user.itemUses[item.id] : item.maxUses;
-          status += ` *(လက်ရှိ: **${left}** ကြိမ်)*`;
-        }
-        return `${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (ID: \`${item.id}\`)\n└ ${item.desc} — ${status}`;
-      }).join('\n\n');
+      const sections = types.map((t) => {
+        const header = `**${ITEM_TYPE_LABELS[t]}**`;
+        const rows = shopOnlyItems
+          .filter((item) => item.type === t)
+          .map((item) => {
+            const rInfo = ITEM_RANKS[item.rank];
+            let status = `💰 **${item.price.toLocaleString()} coins**`;
+            if ((user.items || []).includes(item.id)) {
+              const left = (user.itemUses && user.itemUses[item.id] !== undefined) ? user.itemUses[item.id] : item.maxUses;
+              status = `✅ *(သုံးနေဆဲ — ကျန်: **${left}/${item.maxUses}** ကြိမ်)*`;
+            }
+            return `${rInfo.emoji} **[R${item.rank}] ${item.name}** (\`${item.id}\`) — ${item.desc} • ${status}`;
+          })
+          .join('\n');
+        return `${header}\n${rows}`;
+      });
 
       const shopEmbed = new EmbedBuilder()
         .setColor('#9B59B6')
         .setTitle('🏪 Keo အရောင်းဆိုင် (Rank 1 - 3 Hunt Items)')
-        .setDescription(shopList)
-        .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> | Rank 4 - 7 အဆင့်မြင့်ပစ္စည်းများကို Kdaily နှင့် Khunt မှသာ ရနိုင်ပါသည်' });
+        .setDescription(sections.join('\n\n'))
+        .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> | Rank 4 (🟠) - Rank 7 (🌌) ကို Khunt နှင့် Kopen lc မှသာ ရနိုင်ပါသည်' });
 
       return message.reply({ embeds: [shopEmbed] });
     },
   },
 
-  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id>)
+  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id> - တစ်မျိုးလျှင် တစ်ခုသာ သုံးခွင့်ရှိသည်)
   {
     names: ['buy'],
     async execute(message, args, user) {
-      const itemId = args[0] ? args[0].toLowerCase() : null;
+      const itemId = args[0] ? args[0].toLowerCase().trim() : null;
       const item = SHOP_ITEMS.find((i) => i.id === itemId);
 
       if (!item) {
@@ -280,29 +283,21 @@ module.exports = [
         const rInfo = ITEM_RANKS[item.rank];
         return message.reply(
           `🚫 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** ကို ဆိုင်မှာ ဝယ်ယူ၍ မရပါ!\n` +
-          `Rank 4 မှ Rank 7 အထိ အဆင့်မြင့်ပစ္စည်းများကို \`Kdaily\` နှင့် \`Khunt\` မှသာ ရှာဖွေရရှိနိုင်ပါမယ်။`
+          `Rank 4 (🟠) မှ Rank 7 (🌌) အထိ အဆင့်မြင့်ပစ္စည်းများကို \`Khunt\` နှင့် \`Kopen lc\` မှသာ ရရှိနိုင်ပါမယ်။`
         );
       }
 
-      if ((user.items || []).includes(item.id)) {
-        return message.reply(`✅ သင်သည် **${item.name}** ကို ပိုင်ဆိုင်ပြီးသား ဖြစ်ပါတယ်! (\`Kinv\` တွင် စစ်ဆေးပါ)`);
-      }
-
-      if (item.luckBonus > 0) {
-        const existingLuckId = (user.items || []).find((id) => {
-          const owned = findItemById(id);
-          return owned && owned.luckBonus > 0;
-        });
-        if (existingLuckId) {
-          const existingItem = findItemById(existingLuckId);
-          const usesLeft = (user.itemUses && user.itemUses[existingLuckId] !== undefined)
-            ? user.itemUses[existingLuckId]
-            : existingItem.maxUses;
-          return message.reply(
-            `❌ **Luck Item တစ်မျိုးတည်းသာ ဆိုင်မှ ဝယ်သုံးခွင့်ရှိပါတယ်!**\n` +
-            `လက်ရှိတွင် သင်၌ **${existingItem.name}** *(ကျန်: **${usesLeft}** ကြိမ်)* ရှိနေပါသေးတယ်။ အဲဒါ ကုန်သွားမှ နောက်တစ်ခု ထပ်ဝယ်နိုင်ပါမယ်။`
-          );
-        }
+      // အမျိုးအစားတူ (luck / extra / multiplier) တစ်ခုခု လက်ရှိသုံးနေဆဲဆိုလျှင် ဝယ်ခွင့်ပိတ်ခြင်း
+      const activeSameType = getActiveItemByType(user, item.type);
+      if (activeSameType) {
+        const activeRank = ITEM_RANKS[activeSameType.rank] || ITEM_RANKS[1];
+        const usesLeft = (user.itemUses && user.itemUses[activeSameType.id] !== undefined)
+          ? user.itemUses[activeSameType.id]
+          : activeSameType.maxUses;
+        return message.reply(
+          `❌ **${ITEM_TYPE_LABELS[item.type]}** ထဲမှ တစ်မျိုးကို တစ်ခုသာ တပ်ဆင်အသုံးပြုခွင့် ရှိပါတယ်!\n` +
+          `လက်ရှိတွင် ${activeRank.emoji} **${activeSameType.name}** (\`${activeSameType.id}\`) *(ကျန်: **${usesLeft}/${activeSameType.maxUses}** ကြိမ်)* ရှိနေပါသေးတယ်။ အကြိမ်ရေ ကုန်သွားမှ နောက်တစ်ခု ထပ်ဝယ်/ထပ်သုံးနိုင်ပါမယ်။`
+        );
       }
 
       if (user.balance < item.price) {
@@ -310,53 +305,129 @@ module.exports = [
       }
 
       user.balance -= item.price;
-      const totalUses = grantItemToUser(user, item);
+      if (!user.items) user.items = [];
+      if (!user.itemUses) user.itemUses = {};
+      user.items.push(item.id);
+      user.itemUses[item.id] = item.maxUses;
+      user.markModified('itemUses');
       await user.save();
 
       const rInfo = ITEM_RANKS[item.rank];
       return message.reply(
-        `🎉 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** ကို **${item.price.toLocaleString()} coins** ဖြင့် ဝယ်ယူပြီးပါပြီ! (အသုံးပြုခွင့်: **${totalUses} ကြိမ်**)`
+        `🎉 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (\`${item.id}\`) ကို **${item.price.toLocaleString()} coins** ဖြင့် ဝယ်ယူတပ်ဆင်ပြီးပါပြီ! (အသုံးပြုခွင့်: **${item.maxUses} ကြိမ်**)`
       );
     },
   },
 
-  // ၈။ ပိုင်ဆိုင်သော ပစ္စည်းများ စစ်ဆေးခြင်း (Kinv / Kinventory / Kbag)
+  // ၈။ အိတ်ထဲ သိမ်းထားသော အပို Item ကို ပြောင်းတပ်ဆင်ခြင်း (Kuse <id> / Kequip <id>)
   {
-    names: ['inv', 'inventory', 'bag'],
+    names: ['use', 'equip'],
     async execute(message, args, user) {
-      const ownedIds = user.items || [];
-      const crateCount = user.boxes || 0;
-      const lines = [];
-
-      if (crateCount > 0) {
-        lines.push(`🎁 **Lucky Crate (\`lc\`)** — **${crateCount} လုံး** *(\`Kopen lc [အရေအတွက်/all]\` ဖြင့် ဖွင့်ပါ)*`);
+      const itemId = args[0] ? args[0].toLowerCase().trim() : null;
+      if (!itemId) {
+        return message.reply('❌ တပ်ဆင်အသုံးပြုမယ့် Item ID ထည့်ပေးပါ! (ဥပမာ - `Kuse luck5` — အိတ်ထဲက ပစ္စည်းများကို ကြည့်ရန် `Kinv` ရိုက်ပါ)');
       }
 
-      const sortedItems = ownedIds
-        .map((id) => findItemById(id))
-        .filter(Boolean)
-        .sort((a, b) => b.rank - a.rank);
+      const storedCount = (user.storedItems && user.storedItems[itemId]) || 0;
+      if (storedCount <= 0) {
+        return message.reply(`❌ သင့်အိတ် (Storage) ထဲမှာ \`${itemId}\` ပစ္စည်း မရှိပါဘူး! \`Kinv\` တွင် စစ်ဆေးပါ။`);
+      }
 
-      for (const itemInfo of sortedItems) {
-        const rInfo = ITEM_RANKS[itemInfo.rank] || ITEM_RANKS[1];
-        const left = (user.itemUses && user.itemUses[itemInfo.id] !== undefined)
-          ? user.itemUses[itemInfo.id]
-          : itemInfo.maxUses;
-        lines.push(
-          `${rInfo.emoji} **[Rank ${itemInfo.rank}] ${itemInfo.name}** (\`${itemInfo.id}\`)\n` +
-          `└ ${itemInfo.desc} — ကျန်ရှိအကြိမ်: **${left} ကြိမ်**`
+      const item = findItemById(itemId);
+      if (!item) {
+        return message.reply(`❌ \`${itemId}\` ပစ္စည်း အချက်အလက် မတွေ့ပါဘူး။`);
+      }
+
+      const activeSameType = getActiveItemByType(user, item.type);
+      if (activeSameType) {
+        const activeRank = ITEM_RANKS[activeSameType.rank] || ITEM_RANKS[1];
+        const usesLeft = (user.itemUses && user.itemUses[activeSameType.id] !== undefined)
+          ? user.itemUses[activeSameType.id]
+          : activeSameType.maxUses;
+        return message.reply(
+          `❌ **${ITEM_TYPE_LABELS[item.type]}** ထဲမှ ${activeRank.emoji} **${activeSameType.name}** (\`${activeSameType.id}\`) ကို လက်ရှိသုံးနေဆဲ ဖြစ်ပါတယ်! *(ကျန်: **${usesLeft}/${activeSameType.maxUses}** ကြိမ်)*\n` +
+          `အဲဒီပစ္စည်း အကြိမ်ရေ ကုန်သွားမှ \`Kuse ${item.id}\` ဖြင့် ပြောင်းလဲအသုံးပြုနိုင်ပါမယ်။`
         );
       }
 
-      if (lines.length === 0) {
+      // Storage ထဲမှ ၁ ခု နုတ်ပြီး Active Slot ထဲသို့ တပ်ဆင်ခြင်း
+      if (storedCount - 1 <= 0) {
+        delete user.storedItems[itemId];
+      } else {
+        user.storedItems[itemId] = storedCount - 1;
+      }
+      user.markModified('storedItems');
+
+      if (!user.items) user.items = [];
+      if (!user.itemUses) user.itemUses = {};
+      user.items.push(item.id);
+      user.itemUses[item.id] = item.maxUses;
+      user.markModified('itemUses');
+
+      await user.save();
+
+      const rInfo = ITEM_RANKS[item.rank] || ITEM_RANKS[1];
+      return message.reply(
+        `✅ ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (\`${item.id}\`) ကို တပ်ဆင်အသုံးပြုလိုက်ပါပြီ! (အသုံးပြုခွင့်: **${item.maxUses} ကြိမ်**)`
+      );
+    },
+  },
+
+  // ၉။ ပိုင်ဆိုင်သော ပစ္စည်းများ စစ်ဆေးခြင်း (Kinv / Kinventory / Kbag)
+  {
+    names: ['inv', 'inventory', 'bag'],
+    async execute(message, args, user) {
+      const crateCount = user.boxes || 0;
+      const sections = [];
+
+      if (crateCount > 0) {
+        sections.push(`🎁 **Lucky Crate (\`lc\`)** — **${crateCount} လုံး** *(\`Kopen lc [အရေအတွက်/all]\` ဖြင့် ဖွင့်ပါ)*`);
+      }
+
+      // ၁။ လက်ရှိ တပ်ဆင်အသုံးပြုနေသော ပစ္စည်းများ (တစ်မျိုးလျှင် ၁ ခုစီ)
+      const activeLines = [];
+      for (const t of ['luck', 'extra', 'multiplier']) {
+        const activeItem = getActiveItemByType(user, t);
+        if (activeItem) {
+          const rInfo = ITEM_RANKS[activeItem.rank] || ITEM_RANKS[1];
+          const left = (user.itemUses && user.itemUses[activeItem.id] !== undefined)
+            ? user.itemUses[activeItem.id]
+            : activeItem.maxUses;
+          activeLines.push(
+            `${rInfo.emoji} **[R${activeItem.rank}] ${activeItem.name}** (\`${activeItem.id}\`) — ကျန်: **${left}/${activeItem.maxUses} ကြိမ်**\n` +
+            `└ ${activeItem.desc}`
+          );
+        }
+      }
+
+      if (activeLines.length > 0) {
+        sections.push(`⚔️ **လက်ရှိ အသုံးပြုနေသော ပစ္စည်းများ (Active — 1 Per Type):**\n${activeLines.join('\n')}`);
+      }
+
+      // ၂။ အိတ်ထဲတွင် သိမ်းထားသော အပိုပစ္စည်းများ (Kuse <id> ဖြင့် သုံးရန်)
+      const storedEntries = Object.entries(user.storedItems || {}).filter(([, count]) => count > 0);
+      if (storedEntries.length > 0) {
+        const storedLines = storedEntries
+          .map(([id, count]) => {
+            const info = findItemById(id);
+            if (!info) return `• \`${id}\` × ${count}`;
+            const rInfo = ITEM_RANKS[info.rank] || ITEM_RANKS[1];
+            return `${rInfo.emoji} **[R${info.rank}] ${info.name}** (\`${info.id}\`) × **${count} ခု** — *(${info.desc})*`;
+          })
+          .join('\n');
+
+        sections.push(`🎒 **အိတ်ထဲ သိမ်းထားသော အပိုပစ္စည်းများ (\`Kuse <id>\` ဖြင့် သုံးရန်):**\n${storedLines}`);
+      }
+
+      if (sections.length === 0) {
         return message.reply('🎒 သင့်ကျောပိုးအိတ် (Inventory) ထဲမှာ ဘာပစ္စည်းမှ မရှိသေးပါဘူး! `Kshop`၊ `Kdaily` သို့မဟုတ် `Khunt` မှ ရယူနိုင်ပါတယ်။');
       }
 
       const invEmbed = new EmbedBuilder()
         .setColor('#1ABC9C')
         .setAuthor({ name: `${message.author.username} ၏ ကျောပိုးအိတ် (Inventory)`, iconURL: message.author.displayAvatarURL() })
-        .setDescription(lines.join('\n\n'))
-        .setFooter({ text: 'Rank 4 - 7 အဆင့်မြင့်ပစ္စည်းများကို Kdaily နှင့် Khunt မှ ရှာဖွေရယူပါ' })
+        .setDescription(sections.join('\n\n'))
+        .setFooter({ text: 'တစ်မျိုးလျှင် တစ်ခုသာ သုံးခွင့်ရှိပြီး အကြိမ်ရေကုန်မှ နောက်တစ်ခု ထပ်သုံးနိုင်ပါသည်' })
         .setTimestamp();
 
       return message.reply({ embeds: [invEmbed] });
