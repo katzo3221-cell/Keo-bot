@@ -243,7 +243,7 @@ module.exports = [
         .addFields(
           { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kuse <id>`, `Kinv`, `Kgive @user <amount>`, `Ktop [cash/lvl/battle/zoo]`' },
           { name: '🏹 Hunting & Lucky Crate', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksell <id> [အရေအတွက်/all]`, `Ksell <rank>`, `Ksell all`, `Kopen lc [အရေအတွက်/all]`' },
-          { name: '🎲 Gambling (လောင်းကစား)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
+          { name: '🎲 Gambling (လောင်းကစား & PvP)', value: '`Kcf <amount/all> [h/t]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj [@user] <amount/all>`, `Kskm [@user] <amount/all>`, `Kgin <amount/all> [အကောင်]`, `Kmines <amount/all> [ဗုံး 1-10]`, `Krps @user <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`), `Kbattle @user`, `Kteam <id1> [id2] [id3]`, `Kteam clear`' },
           { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
           { name: '🛠️ Utility, Quest & Profile', value: '`Kprofile` (`Klvl`), `Kcd`, `Kquest` (`Kquest claim`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
