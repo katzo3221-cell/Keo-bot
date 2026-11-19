@@ -75,12 +75,14 @@ function findGinAnimal(raw) {
   return GIN_ANIMALS.find((a) => a.aliases.includes(q)) || null;
 }
 
-// ================= Mines Multiplier တွက်ချက်ခြင်း (4x4 = 16 ကွက်) =================
-function calcMinesMultiplier(revealedCount, bombsCount) {
+
+// ================= Mines Multiplier တွက်ချက်ခြင်း (3x3 = 9 ကွက် | 4x4 = 16 ကွက်) =================
+function calcMinesMultiplier(revealedCount, bombsCount, totalCells = 16) {
   if (revealedCount <= 0) return 1;
+  if (revealedCount > totalCells - bombsCount) return 0;
   let prob = 1;
   for (let i = 0; i < revealedCount; i++) {
-    prob *= (16 - bombsCount - i) / (16 - i);
+    prob *= (totalCells - bombsCount - i) / (totalCells - i);
   }
   return Math.max(1.05, Math.round((0.96 / prob) * 100) / 100);
 }
@@ -595,29 +597,39 @@ module.exports = [
     },
   },
 
-  // =========================================================================
-  // ၃။ ဗုံးရှောင်ဂိမ်း (Kmines / Kmine <amount> [bombs 1-10])
+  
+    // =========================================================================
+  // ၃။ ဗုံးရှောင်ဂိမ်း (Kmines = 4x4 Default 4 | Kmine = 3x3 Default 3)
   // =========================================================================
   {
     names: ['mines', 'mine'],
-    async execute(message, args, user) {
+    async execute(message, args, user, commandName) {
       if (activeGambling.has(message.author.id)) {
         return message.reply('💣 သင်သည် လောင်းကစားပွဲတစ်ခု ကစားနေဆဲ ဖြစ်ပါတယ်! အရင်ပွဲ ပြီးအောင် ဆော့ပါ။');
       }
 
+      const isSmallGrid = commandName === 'mine';
+      const gridSize = isSmallGrid ? 3 : 4;
+      const totalCells = gridSize * gridSize; // 3x3 = 9 | 4x4 = 16
+      const defaultBombs = isSmallGrid ? 3 : 4;
+      const maxBombs = isSmallGrid ? 6 : 11;
+      const cmdLabel = isSmallGrid ? 'Kmine' : 'Kmines';
+
       const bet = parseBet(args[0], user.balance);
       if (isNaN(bet) || bet <= 0) {
-        return message.reply('❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - `Kmines 1000` သို့မဟုတ် `Kmines 1000 5`)');
+        return message.reply(`❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (ဥပမာ - \`${cmdLabel} 1000\` သို့မဟုတ် \`${cmdLabel} 1000 ${defaultBombs}\`)`);
       }
       if (bet > user.balance) {
         return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
-      let bombsCount = 4; // မူလ 3 မှ 4 သို့ ပြောင်းပါ
+      let bombsCount = defaultBombs;
       if (args[1] !== undefined) {
         const parsedBombs = parseInt(args[1], 10);
-        if (isNaN(parsedBombs) || parsedBombs < 1 || parsedBombs > 11) {
-          return message.reply('❌ ဗုံးအရေအတွက်ကို **၁ လုံးမှ ၁၁ လုံး** အတွင်းသာ ထည့်ပေးပါ! (ဥပမာ - `Kmines 1000 4`)');
+        if (isNaN(parsedBombs) || parsedBombs < 1 || parsedBombs > maxBombs) {
+          return message.reply(
+            `❌ **${gridSize}×${gridSize}** အတွက် ဗုံးအရေအတွက်ကို **၁ လုံးမှ ${maxBombs} လုံး** အတွင်းသာ ထည့်ပေးပါ! (ဥပမာ - \`${cmdLabel} 1000 ${defaultBombs}\`)`
+          );
         }
         bombsCount = parsedBombs;
       }
@@ -628,21 +640,21 @@ module.exports = [
         user.balance -= bet;
         await user.save();
 
-        // 4x4 (16 ကွက်) ထဲတွင် ဗုံးနေရာများ ကျပန်းချထားခြင်း
+        // ဗုံးနေရာများ ကျပန်းချထားခြင်း (3x3 = 9 ကွက် | 4x4 = 16 ကွက်)
         const bombIndices = new Set();
         while (bombIndices.size < bombsCount) {
-          bombIndices.add(Math.floor(Math.random() * 16));
+          bombIndices.add(Math.floor(Math.random() * totalCells));
         }
 
         const revealed = new Set();
-        const safeTotal = 16 - bombsCount;
+        const safeTotal = totalCells - bombsCount;
 
         const buildBoardRows = (gameOver = false, explodedIdx = -1) => {
           const rows = [];
-          for (let r = 0; r < 4; r++) {
+          for (let r = 0; r < gridSize; r++) {
             const row = new ActionRowBuilder();
-            for (let c = 0; c < 4; c++) {
-              const idx = r * 4 + c;
+            for (let c = 0; c < gridSize; c++) {
+              const idx = r * gridSize + c;
               const isBomb = bombIndices.has(idx);
               const isOpen = revealed.has(idx);
 
@@ -679,7 +691,7 @@ module.exports = [
             rows.push(row);
           }
 
-          const mult = calcMinesMultiplier(revealed.size, bombsCount);
+          const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
           const cashoutAmount = Math.floor(bet * mult);
 
           const controlRow = new ActionRowBuilder().addComponents(
@@ -698,16 +710,18 @@ module.exports = [
         };
 
         const buildEmbed = (statusText, color = '#3498DB') => {
-          const mult = calcMinesMultiplier(revealed.size, bombsCount);
-          const nextMult = calcMinesMultiplier(revealed.size + 1, bombsCount);
+          const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
+          const nextMult = calcMinesMultiplier(revealed.size + 1, bombsCount, totalCells);
+          const nextText = nextMult > 0 ? ` *(နောက် ၁ ကွက်: ${nextMult}x)*` : ' *(MAX)*';
+
           return new EmbedBuilder()
             .setColor(color)
-            .setTitle(`💎 ${message.author.username} ၏ Mines (💣 ဗုံး ${bombsCount} လုံး)`)
+            .setTitle(`💎 ${message.author.username} ၏ Mines ${gridSize}×${gridSize} (💣 ဗုံး ${bombsCount} လုံး)`)
             .setDescription(statusText)
             .addFields(
               { name: '💰 လောင်းကြေး', value: `**${bet.toLocaleString()} coins**`, inline: true },
               { name: '💎 ဖွင့်ပြီး', value: `**${revealed.size} / ${safeTotal}**`, inline: true },
-              { name: '📈 လက်ရှိအဆ', value: `**${mult}x** *(နောက် ၁ ကွက်: ${nextMult}x)*`, inline: true }
+              { name: '📈 လက်ရှိအဆ', value: `**${mult}x**${nextText}`, inline: true }
             );
         };
 
@@ -727,7 +741,7 @@ module.exports = [
           if (i.customId === 'mine_cashout') {
             ended = true;
             collector.stop('cashout');
-            const mult = calcMinesMultiplier(revealed.size, bombsCount);
+            const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
             const payout = Math.floor(bet * mult);
             const profit = payout - bet;
 
@@ -765,7 +779,7 @@ module.exports = [
           if (revealed.size >= safeTotal) {
             ended = true;
             collector.stop('cleared');
-            const mult = calcMinesMultiplier(revealed.size, bombsCount);
+            const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
             const payout = Math.floor(bet * mult);
             const profit = payout - bet;
 
@@ -794,7 +808,7 @@ module.exports = [
 
           const freshUser = await getUser(message.author.id, message.author.username);
           if (revealed.size > 0) {
-            const mult = calcMinesMultiplier(revealed.size, bombsCount);
+            const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
             const payout = Math.floor(bet * mult);
             freshUser.balance += payout;
             await freshUser.save();
