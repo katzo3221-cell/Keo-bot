@@ -31,18 +31,17 @@ function evaluateSkm(hand) {
   let tag = '';
   if (hand.length === 3 && allSameRank) {
     mult = 3;
-    tag = 'သုံးချပ်ပူး (3x)';
+    tag = 'သုံးချပ်ပူး';
   } else if (hand.length === 3 && allSameSuit) {
     mult = 3;
-    tag = 'ပွင့်တူ ၃ ချပ် (3x)';
+    tag = 'ပွင့်တူ ၃ ချပ်';
   } else if (hand.length === 2 && allSameRank) {
     mult = 2;
-    tag = 'ပူး ၂ ချပ် (2x)';
+    tag = 'ပူး ၂ ချပ်';
   } else if (hand.length === 2 && allSameSuit) {
     mult = 2;
-    tag = 'ပွင့်တူ ၂ ချပ် (2x)';
+    tag = 'ပွင့်တူ ၂ ချပ်';
   }
-
   const highestCard = Math.max(...hand.map((c) => SKM_RANK_ORDER[c.rank] || 0));
   const label = `${isDo ? `🔥 ${points} ဒို` : `${points} မှတ်`}${tag ? ` • ${tag}` : ''}`;
 
@@ -364,26 +363,36 @@ module.exports = [
           }
 
           const dEval = evaluateSkm(dealerHand);
-          const cmp = compareSkmHands(playerHand, dealerHand);
           const freshUser = await getUser(message.author.id, message.author.username);
 
-          let desc = '';
-          let color = '#95A5A6';
+          // Solo တွင် အမှတ်တူပါက ဒိုင်စားမည် (House Edge)
+          let playerWon = false;
+          let tieDealerWin = false;
 
-          if (cmp > 0) {
-            const winProfit = bet * pEval.mult;
+          if (pEval.isDo !== dEval.isDo) {
+            playerWon = pEval.isDo;
+          } else if (pEval.points !== dEval.points) {
+            playerWon = pEval.points > dEval.points;
+          } else {
+            playerWon = false;
+            tieDealerWin = true;
+          }
+
+          let desc = '';
+          let color = '#E74C3C';
+
+          if (playerWon) {
+            // Solo အဆနှုန်းထား: သာမန်=1x | ၂ ချပ်ပွင့်တူ/ပူး=1.5x | ၃ ချပ်ပွင့်တူ/သုံးချပ်ပူး=2x
+            const soloMult = pEval.mult === 3 ? 2 : pEval.mult === 2 ? 1.5 : 1;
+            const winProfit = Math.floor(bet * soloMult);
             freshUser.balance += bet + winProfit;
             await freshUser.save();
             color = '#2ECC71';
-            const multText = pEval.mult > 1 ? ` (**${pEval.mult}x အဆ!**)` : '';
+            const multText = soloMult > 1 ? ` (**${soloMult}x အဆ!**)` : '';
             desc = `🎉 **အနိုင်ရရှိပါတယ်!**${multText} **+${winProfit.toLocaleString()} coins** ရရှိပါတယ်!`;
-          } else if (cmp < 0) {
-            color = '#E74C3C';
-            desc = `💸 **ရှုံးသွားပါတယ်!** ဒိုင်က **${dEval.label}** ဖြင့် အနိုင်ရသွားပါတယ်။ (**-${bet.toLocaleString()} coins**)`;
           } else {
-            freshUser.balance += bet;
-            await freshUser.save();
-            desc = `🛡️ **သရေကျပါတယ်!** လောင်းကြေး **${bet.toLocaleString()} coins** အရင်းပြန်ရပါတယ်။`;
+            const tieNote = tieDealerWin ? ' *(အမှတ်တူ ဒိုင်စားပါသည်)*' : '';
+            desc = `💸 **ရှုံးသွားပါတယ်!**${tieNote} ဒိုင်က **${dEval.label}** ဖြင့် အနိုင်ရသွားပါတယ်။ (**-${bet.toLocaleString()} coins**)`;
           }
 
           const finalEmbed = new EmbedBuilder()
@@ -469,6 +478,17 @@ module.exports = [
         return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
+      // Winrate ချိန်ညှိရန် (0.12 = Winrate ~31.9% | ပိုနည်းချင်ရင် 0.10 ပြောင်းပါ)
+      const CHOSEN_ANIMAL_CHANCE = 0.12;
+
+      const rollOneGinDie = (chosen) => {
+        if (Math.random() < CHOSEN_ANIMAL_CHANCE) {
+          return chosen;
+        }
+        const others = GIN_ANIMALS.filter((a) => a.id !== chosen.id);
+        return others[Math.floor(Math.random() * others.length)];
+      };
+
       const runGinRoll = async (chosenAnimal, msgOrInteraction, isInteraction = false) => {
         try {
           const freshUser = await getUser(message.author.id, message.author.username);
@@ -496,22 +516,22 @@ module.exports = [
 
           await sleep(1200);
 
-          const r1 = GIN_ANIMALS[Math.floor(Math.random() * GIN_ANIMALS.length)];
-          const r2 = GIN_ANIMALS[Math.floor(Math.random() * GIN_ANIMALS.length)];
-          const r3 = GIN_ANIMALS[Math.floor(Math.random() * GIN_ANIMALS.length)];
+          const r1 = rollOneGinDie(chosenAnimal);
+          const r2 = rollOneGinDie(chosenAnimal);
+          const r3 = rollOneGinDie(chosenAnimal);
           const rolls = [r1, r2, r3];
 
           const matches = rolls.filter((a) => a.id === chosenAnimal.id).length;
           const board = `🎲 **[ ${r1.emoji} ${r1.name} | ${r2.emoji} ${r2.name} | ${r3.emoji} ${r3.name} ]**`;
 
           if (matches > 0) {
-            const mult = matches === 3 ? 5 : matches; // 1 ကောင်=1x, 2 ကောင်=2x, 3 ကောင်=5x
+            const mult = matches; // 1 ကောင်=1x, 2 ကောင်=2x, 3 ကောင်=3x
             const profit = bet * mult;
             const winUser = await getUser(message.author.id, message.author.username);
             winUser.balance += bet + profit;
             await winUser.save();
 
-            const jackpotNote = matches === 3 ? ' 🔥 **(TRIPLE 5x JACKPOT!)**' : '';
+            const jackpotNote = matches === 3 ? ' 🔥 **(TRIPLE 3x JACKPOT!)**' : '';
             return msg.edit(
               `${board}\n🎉 **${chosenAnimal.emoji} ${chosenAnimal.name} ${matches} ကောင် တူသွားပါတယ်!**${jackpotNote}\n💰 **+${profit.toLocaleString()} coins** အနိုင်ရရှိပါတယ်!`
             );

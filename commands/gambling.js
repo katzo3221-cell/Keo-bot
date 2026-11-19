@@ -61,10 +61,12 @@ module.exports = [
 
         await sleep(1200);
 
-        const result = Math.random() < 0.5 ? 'heads' : 'tails';
+        const CF_WIN_RATE = 0.46;
+        const isWin = Math.random() < CF_WIN_RATE;
+        const result = isWin ? choice : (choice === 'heads' ? 'tails' : 'heads');
         const resultText = result === 'heads' ? '👑 ခေါင်း (Heads)' : '🌸 ပန်း (Tails)';
 
-        if (choice === result) {
+        if (isWin) {
           const freshUser = await getUser(message.author.id, message.author.username);
           freshUser.balance += bet * 2;
           await freshUser.save();
@@ -124,7 +126,7 @@ module.exports = [
           await freshUser.save();
           return msg.edit(`${board}\n🔥 **JACKPOT!** ၃ ခုလုံး တူသွားလို့ **+${winnings.toLocaleString()} coins** အနိုင်ရရှိပါတယ်!`);
         } else if (slot1 === slot2 || slot2 === slot3 || slot1 === slot3) {
-          const winnings = Math.floor(bet * 1.5);
+          const winnings = Math.floor(bet * 1.0);
           const freshUser = await getUser(message.author.id, message.author.username);
           freshUser.balance += bet + winnings;
           await freshUser.save();
