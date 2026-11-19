@@ -5,6 +5,7 @@ const http = require('http');
 const mongoose = require('mongoose');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { getUser } = require('./models/User');
+const { isOwner } = require('./utils/helpers');
 
 const client = new Client({
   intents: [
@@ -41,7 +42,8 @@ client.once('clientReady', () => {
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.content.toLowerCase().startsWith('k')) return;
+  // k နောက်တွင် Space မပါဘဲ အင်္ဂလိပ်စာလုံး တိုက်ရိုက်ပါမှ Command အဖြစ် ဖတ်မည်
+  if (message.author.bot || !/^k[a-z]/i.test(message.content)) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
@@ -78,6 +80,12 @@ client.on('messageCreate', async (message) => {
 
   try {
     const user = await getUser(message.author.id, message.author.username);
+
+    // Bot အသုံးပြုခွင့် ပိတ်ခံထားရသော User စစ်ဆေးခြင်း
+    if (user.isBanned && !isOwner(message.author.id)) {
+      return message.reply('🚫 သင်သည် Keo Bot အသုံးပြုခွင့် ပိတ်ပင်ခံထားရပါသည်။');
+    }
+
     await commandObj.execute(message, args, user, commandName);
   } catch (err) {
     console.error(`Command Error (${commandName}):`, err);

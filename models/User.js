@@ -1,11 +1,35 @@
 const mongoose = require('mongoose');
+const { getTodayMyanmarDate } = require('../utils/helpers');
 
 const DAILY_PROFILE_EXP_LIMIT = 3000;
 
-// မြန်မာစံတော်ချိန် (UTC+6:30) ယနေ့ရက်စွဲ
-function getTodayMyanmarDate() {
-  return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
+// နေ့စဉ် Mission (Daily Quests) သတ်မှတ်ချက်များ
+const DAILY_QUESTS_LIST = [
+  {
+    id: 'hunt',
+    title: '🏹 အမဲ ၁၀ ကြိမ်လိုက်ပါ (Khunt)',
+    target: 10,
+    rewardCoins: 1500,
+    rewardCrates: 1,
+    rewardExp: 50,
+  },
+  {
+    id: 'battleWin',
+    title: '⚔️ တိုက်ပွဲ ၃ ပွဲ အနိုင်ရအောင်တိုက်ပါ (Kbattle)',
+    target: 3,
+    rewardCoins: 2000,
+    rewardCrates: 1,
+    rewardExp: 60,
+  },
+  {
+    id: 'work',
+    title: '💼 အလုပ် ၂ ကြိမ်လုပ်ပါ (Kwork)',
+    target: 2,
+    rewardCoins: 1000,
+    rewardCrates: 0,
+    rewardExp: 50,
+  },
+];
 
 // ကစားသမား အချက်အလက် ပုံစံ (Schema)
 const userSchema = new mongoose.Schema({
@@ -18,7 +42,7 @@ const userSchema = new mongoose.Schema({
   zoo: { type: Object, default: {} },
   battleTeam: { type: [String], default: [] },
 
-  // လက်ရှိ တပ်ဆင်အသုံးပြုနေသော Item များ (တစ်မျိုးလျှင် ၁ ခုသာ) နှင့် ကျန်ရှိအကြိမ်ရေ
+  // လက်ရှိ တပ်ဆင်အသုံးပြုနေသော Item များ နှင့် ကျန်ရှိအကြိမ်ရေ
   items: { type: [String], default: [] },
   itemUses: { type: Object, default: {} },
   // Drop မှ အပိုရထားပြီး အိတ်ထဲတွင် သိမ်းထားသော Item များ ({ itemId: count })
@@ -40,6 +64,16 @@ const userSchema = new mongoose.Schema({
   // Kbattle Level & EXP (သီးခြားစနစ်)
   battleExp: { type: Number, default: 0 },
   battleLevel: { type: Number, default: 1 },
+
+  // Bot အသုံးပြုခွင့် ပိတ်ပင်ခြင်း (Admin Ban)
+  isBanned: { type: Boolean, default: false },
+
+  // Daily Quest စနစ်
+  dailyQuestDate: { type: String, default: '' },
+  dailyQuests: {
+    type: Object,
+    default: () => ({ hunt: 0, battleWin: 0, work: 0, claimed: [] }),
+  },
 });
 
 const User = mongoose.model('User', userSchema);
@@ -54,6 +88,26 @@ async function getUser(userId, username = 'Unknown') {
     user.username = username;
   }
   return user;
+}
+
+// နေ့စဉ် Quest ရက်စွဲစစ်၍ အသစ်ပြန်စပေးခြင်း
+function ensureDailyQuests(user) {
+  const todayStr = getTodayMyanmarDate();
+  if (user.dailyQuestDate !== todayStr || !user.dailyQuests) {
+    user.dailyQuestDate = todayStr;
+    user.dailyQuests = { hunt: 0, battleWin: 0, work: 0, claimed: [] };
+    user.markModified('dailyQuests');
+  } else if (!Array.isArray(user.dailyQuests.claimed)) {
+    user.dailyQuests.claimed = [];
+    user.markModified('dailyQuests');
+  }
+}
+
+// Quest အကြိမ်ရေ တိုးပေးခြင်း
+function updateQuestProgress(user, questId, amount = 1) {
+  ensureDailyQuests(user);
+  user.dailyQuests[questId] = (user.dailyQuests[questId] || 0) + amount;
+  user.markModified('dailyQuests');
 }
 
 // Kprofile Level တက်တိုင်း ရရှိမည့် Coins နှင့် Lucky Crate နှုန်းထား
@@ -145,5 +199,8 @@ module.exports = {
   getUser,
   addProfileExp,
   addBattleExp,
+  ensureDailyQuests,
+  updateQuestProgress,
   DAILY_PROFILE_EXP_LIMIT,
+  DAILY_QUESTS_LIST,
 };

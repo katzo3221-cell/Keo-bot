@@ -1,10 +1,22 @@
 const { EmbedBuilder } = require('discord.js');
-const { DAILY_PROFILE_EXP_LIMIT } = require('../models/User');
+const {
+  DAILY_PROFILE_EXP_LIMIT,
+  DAILY_QUESTS_LIST,
+  ensureDailyQuests,
+  addProfileExp,
+} = require('../models/User');
+const { getTodayMyanmarDate } = require('../utils/helpers');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function getTodayMyanmarDate() {
-  return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+function formatDuration(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  if (hours > 0) return `${hours} နာရီ ${minutes} မိနစ်`;
+  if (minutes > 0) return `${minutes} မိနစ် ${seconds} စက္ကန့်`;
+  return `${seconds} စက္ကန့်`;
 }
 
 module.exports = [
@@ -27,6 +39,10 @@ module.exports = [
       const todayStr = getTodayMyanmarDate();
       const todayExp = user.dailyProfileExpDate === todayStr ? (user.dailyProfileExpCount || 0) : 0;
 
+      // လက်ရှိတပ်ဆင်ထားသော Item နှင့် အိတ်ထဲသိမ်းထားသော Item နှစ်ခုလုံး ရေတွက်ခြင်း
+      const activeCount = (user.items || []).length;
+      const storedCount = Object.values(user.storedItems || {}).reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
+
       const profileEmbed = new EmbedBuilder()
         .setColor('#3498DB')
         .setAuthor({ name: `${message.author.username} ၏ ကိုယ်ရေးအကျဉ်း (Profile)`, iconURL: message.author.displayAvatarURL() })
@@ -35,7 +51,7 @@ module.exports = [
           { name: '⚔️ Battle Level', value: `**Lv.${bLevel}** (${bExp}/${bNeeded} EXP)`, inline: true },
           { name: '🎁 Lucky Crates (`lc`)', value: `**${user.boxes || 0} လုံး**`, inline: true },
           { name: '🔥 Daily Streak', value: `**${user.dailyStreak || 0} ရက်**`, inline: true },
-          { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `**${(user.items || []).length} မျိုး**`, inline: true },
+          { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `Active: **${activeCount}** | အိတ်ထဲ: **${storedCount}**`, inline: true },
           { name: '📅 ယနေ့ Profile EXP Limit', value: `**${todayExp.toLocaleString()} / ${DAILY_PROFILE_EXP_LIMIT.toLocaleString()} EXP**`, inline: true },
           { name: '📊 Profile Level တိုးတက်မှု', value: `${pBar} (${Math.floor((pExp / pNeeded) * 100)}%)` },
           { name: '💥 Battle Level တိုးတက်မှု', value: `${bBar} (${Math.floor((bExp / bNeeded) * 100)}%)` }
@@ -46,7 +62,118 @@ module.exports = [
     },
   },
 
-  // ၂။ Discord Profile ပုံ ကြည့်ရှုခြင်း (Kavater / Kavatar / Kav / Kpfp)
+  // ၂။ Cooldown နှင့် နေ့စဉ် Limit များ စစ်ဆေးခြင်း (Kcd / Kcooldown)
+  {
+    names: ['cd', 'cooldown', 'cooldowns', 'limits'],
+    async execute(message, args, user) {
+      const now = Date.now();
+      const todayStr = getTodayMyanmarDate();
+
+      const dailyRemain = (24 * 60 * 60 * 1000) - (now - (user.lastDaily || 0));
+      const dailyStatus = dailyRemain <= 0 ? '✅ **အဆင်သင့်ဖြစ်နေပါပြီ** (`Kdaily`)' : `⏳ ကျန်: **${formatDuration(dailyRemain)}**`;
+
+      const workRemain = (30 * 60 * 1000) - (now - (user.lastWork || 0));
+      const workStatus = workRemain <= 0 ? '✅ **အဆင်သင့်ဖြစ်နေပါပြီ** (`Kwork`)' : `⏳ ကျန်: **${formatDuration(workRemain)}**`;
+
+      const huntDrops = user.dailyHuntItemDate === todayStr ? (user.dailyHuntItemCount || 0) : 0;
+      const profileExpToday = user.dailyProfileExpDate === todayStr ? (user.dailyProfileExpCount || 0) : 0;
+      const huntProgress = user.amvLocked ? '🔒 **AMV အတည်ပြုရန် လိုအပ်နေပါသည်** (`Kh`)' : `**${user.huntCount || 0} / 100 ကြိမ်**`;
+
+      const cdEmbed = new EmbedBuilder()
+        .setColor('#1ABC9C')
+        .setAuthor({ name: `${message.author.username} ၏ Cooldown & Daily Limits`, iconURL: message.author.displayAvatarURL() })
+        .addFields(
+          { name: '🎁 နေ့စဉ်ဆုကြေး (`Kdaily`)', value: dailyStatus, inline: false },
+          { name: '💼 အလုပ်လုပ်ခြင်း (`Kwork`)', value: workStatus, inline: false },
+          { name: '🎒 ယနေ့ Hunt Item Drop', value: `**${huntDrops} / 3 ခု**`, inline: true },
+          { name: '✨ ယနေ့ Profile EXP', value: `**${profileExpToday.toLocaleString()} / ${DAILY_PROFILE_EXP_LIMIT.toLocaleString()}**`, inline: true },
+          { name: '🛡️ AMV Hunt Counter', value: huntProgress, inline: true }
+        )
+        .setFooter({ text: 'နေ့စဉ် Limit များသည် မြန်မာစံတော်ချိန် ည ၁၂:၀၀ တွင် ပြန်လည်စတင်ပါသည်' })
+        .setTimestamp();
+
+      return message.reply({ embeds: [cdEmbed] });
+    },
+  },
+
+  // ၃။ နေ့စဉ် Mission စနစ် (Kquest / Kq / Kquest claim)
+  {
+    names: ['quest', 'quests', 'q'],
+    async execute(message, args, user) {
+      ensureDailyQuests(user);
+      const sub = args[0]?.toLowerCase();
+
+      // ဆုလက်ဆောင် ထုတ်ယူခြင်း (Kquest claim)
+      if (sub === 'claim' || sub === 'c') {
+        let totalCoins = 0;
+        let totalCrates = 0;
+        let totalExp = 0;
+        const claimedNames = [];
+
+        for (const q of DAILY_QUESTS_LIST) {
+          const progress = user.dailyQuests[q.id] || 0;
+          const alreadyClaimed = user.dailyQuests.claimed.includes(q.id);
+
+          if (progress >= q.target && !alreadyClaimed) {
+            user.dailyQuests.claimed.push(q.id);
+            totalCoins += q.rewardCoins;
+            totalCrates += q.rewardCrates;
+            totalExp += q.rewardExp;
+            claimedNames.push(q.title);
+          }
+        }
+
+        if (claimedNames.length === 0) {
+          await user.save();
+          return message.reply('❌ ထုတ်ယူနိုင်သော ပြီးမြောက်ပြီးသား Quest မရှိသေးပါ! `Kquest` ဖြင့် စစ်ဆေးပါ။');
+        }
+
+        user.markModified('dailyQuests');
+        user.balance += totalCoins;
+        user.boxes = (user.boxes || 0) + totalCrates;
+        const expRes = addProfileExp(user, totalExp);
+        await user.save();
+
+        const crateLine = totalCrates > 0 ? ` | 🎁 Lucky Crate: **+${totalCrates} လုံး**` : '';
+        return message.reply(
+          `🎉 **Daily Quest ဆုလက်ဆောင် ထုတ်ယူပြီးပါပြီ!** (${claimedNames.length} ခု)\n` +
+          `💰 Coins: **+${totalCoins.toLocaleString()}**${crateLine} | ✨ Profile EXP: **+${expRes.addedExp}**${expRes.levelUpText}`
+        );
+      }
+
+      // Quest စာရင်း ကြည့်ရှုခြင်း
+      await user.save();
+      let hasClaimable = false;
+
+      const lines = DAILY_QUESTS_LIST.map((q) => {
+        const current = Math.min(user.dailyQuests[q.id] || 0, q.target);
+        const isClaimed = user.dailyQuests.claimed.includes(q.id);
+        const isDone = current >= q.target;
+
+        let status = `⏳ (${current}/${q.target})`;
+        if (isClaimed) {
+          status = '✅ **ထုတ်ယူပြီး**';
+        } else if (isDone) {
+          status = '🎁 **ပြီးမြောက်ပြီ — `Kquest claim` ဖြင့် ထုတ်ပါ!**';
+          hasClaimable = true;
+        }
+
+        const crateReward = q.rewardCrates > 0 ? ` + 🎁 ${q.rewardCrates} lc` : '';
+        return `${q.title}\n└ တိုးတက်မှု: ${status} • ဆု: 💰 ${q.rewardCoins.toLocaleString()}${crateReward} + ✨ ${q.rewardExp} EXP`;
+      });
+
+      const questEmbed = new EmbedBuilder()
+        .setColor(hasClaimable ? '#2ECC71' : '#F39C12')
+        .setAuthor({ name: `${message.author.username} ၏ နေ့စဉ် Mission (Daily Quests)`, iconURL: message.author.displayAvatarURL() })
+        .setDescription(lines.join('\n\n'))
+        .setFooter({ text: 'ပြီးမြောက်ပါက Kquest claim ရိုက်၍ ဆုထုတ်ယူပါ' })
+        .setTimestamp();
+
+      return message.reply({ embeds: [questEmbed] });
+    },
+  },
+
+  // ၄။ Discord Profile ပုံ ကြည့်ရှုခြင်း (Kavater / Kavatar / Kav / Kpfp)
   {
     names: ['avater', 'avatar', 'av', 'pfp'],
     async execute(message) {
@@ -68,7 +195,7 @@ module.exports = [
     },
   },
 
-  // ၃။ စကားပြန်ပြောခိုင်းခြင်း (Krepeat / Krep / Ksay)
+  // ၅။ စကားပြန်ပြောခိုင်းခြင်း (Krepeat / Krep / Ksay)
   {
     names: ['repeat', 'rep', 'say'],
     async execute(message, args) {
@@ -92,7 +219,6 @@ module.exports = [
       }
 
       const cleanText = text.slice(0, 2000);
-
       await message.delete().catch(() => {});
 
       for (let i = 0; i < count; i++) {
@@ -107,7 +233,7 @@ module.exports = [
     },
   },
 
-  // ၄။ Command စာရင်းကြည့်ရန် (Khelp)
+  // ၆။ Command စာရင်းကြည့်ရန် (Khelp)
   {
     names: ['help'],
     async execute(message) {
@@ -115,12 +241,12 @@ module.exports = [
         .setColor('#5865F2')
         .setTitle('📜 Keo Bot အသုံးပြုနည်း Command လမ်းညွှန်')
         .addFields(
-          { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kinv`, `Kgive @user <amount>`, `Ktop`' },
-          { name: '🏹 Hunting & Lucky Crate', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksell <id> [အရေအတွက်/all]`, `Ksell all`, `Kopen lc [အရေအတွက်/all]`' },
-          { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
+          { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kuse <id>`, `Kinv`, `Kgive @user <amount>`, `Ktop [cash/lvl/battle/zoo]`' },
+          { name: '🏹 Hunting & Lucky Crate', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksell <id> [အရေအတွက်/all]`, `Ksell <rank>`, `Ksell all`, `Kopen lc [အရေအတွက်/all]`' },
+          { name: '🎲 Gambling (လောင်းကစား)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`), `Kbattle @user`, `Kteam <id1> [id2] [id3]`, `Kteam clear`' },
           { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
-          { name: '🛠️ Utility & Profile', value: '`Kprofile` (`Klvl`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
+          { name: '🛠️ Utility, Quest & Profile', value: '`Kprofile` (`Klvl`), `Kcd`, `Kquest` (`Kquest claim`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
         )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 

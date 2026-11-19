@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { User, getUser, addProfileExp } = require('../models/User');
+const { User, getUser, addProfileExp, updateQuestProgress } = require('../models/User');
+const ANIMALS = require('../data/animals');
 const {
   ITEM_RANKS,
   ITEM_TYPE_LABELS,
@@ -57,7 +58,6 @@ module.exports = [
       const streakBonus = (user.dailyStreak - 1) * 100;
       const reward = Math.min(baseReward + levelBonus + expBonus + streakBonus, MAX_DAILY);
 
-      // Daily ဆုအဖြစ် Lucky Crate (lc) ၂ လုံး ပေးခြင်း (၃ ရက်ဆက် Streak ဆိုလျှင် +1 အပိုရမည်)
       let dailyCrates = 2;
       let streakBonusText = '';
       if (user.dailyStreak % 3 === 0) {
@@ -69,7 +69,6 @@ module.exports = [
       user.balance += reward;
       user.lastDaily = now;
 
-      // Profile EXP +100 (Daily Limit 3,000)
       const expRes = addProfileExp(user, 100);
       await user.save();
 
@@ -109,7 +108,9 @@ module.exports = [
       user.balance += earned;
       user.lastWork = now;
 
-      // Profile EXP +35 (Daily Limit 3,000)
+      // Daily Quest Progress တိုးပေးခြင်း
+      updateQuestProgress(user, 'work', 1);
+
       const expRes = addProfileExp(user, 35);
       await user.save();
 
@@ -120,7 +121,7 @@ module.exports = [
     },
   },
 
-  // ၄။ သူငယ်ချင်းဆီ ပိုက်ဆံလွှဲပေးခြင်း (Kgive @user 100 - Confirm / Reject ခလုတ်စနစ်)
+  // ၄။ သူငယ်ချင်းဆီ ပိုက်ဆံလွှဲပေးခြင်း (Kgive @user 100)
   {
     names: ['give'],
     async execute(message, args, user) {
@@ -211,30 +212,82 @@ module.exports = [
     },
   },
 
-  // ၅။ အချမ်းသာဆုံးစာရင်း (Ktop / Klb)
+  // ၅။ ထိပ်တန်းစာရင်း Top 10 (Ktop [cash / lvl / battle / zoo])
   {
     names: ['top', 'lb'],
-    async execute(message) {
-      const sorted = await User.find().sort({ balance: -1 }).limit(5);
-      if (sorted.length === 0) return message.reply('စာရင်း မရှိသေးပါ။');
+    async execute(message, args) {
+      const category = (args[0] || 'cash').toLowerCase();
+      const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      const activeFilter = { isBanned: { $ne: true } };
 
-      const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-      const leaderboard = sorted
-        .map((u, index) => `${medals[index]} **${u.username}** (Profile Lv.${u.level}) — 💰 **${u.balance.toLocaleString()} coins**`)
-        .join('\n');
+      let title = '';
+      let color = '#FF4500';
+      let lines = [];
+
+      if (['lvl', 'level', 'profile', 'exp'].includes(category)) {
+        const sorted = await User.find(activeFilter).sort({ level: -1, exp: -1 }).limit(10);
+        title = '🏅 Profile Level အမြင့်ဆုံး ကစားသမားများ (Top 10)';
+        color = '#3498DB';
+        lines = sorted.map(
+          (u, idx) => `${medals[idx]} **${u.username}** — 🏅 **Lv.${u.level || 1}** (${(u.exp || 0).toLocaleString()} EXP)`
+        );
+      } else if (['battle', 'b', 'blvl', 'pvp'].includes(category)) {
+        const sorted = await User.find(activeFilter).sort({ battleLevel: -1, battleExp: -1 }).limit(10);
+        title = '⚔️ Battle Level အမြင့်ဆုံး ကစားသမားများ (Top 10)';
+        color = '#E67E22';
+        lines = sorted.map(
+          (u, idx) => `${medals[idx]} **${u.username}** — ⚔️ **Battle Lv.${u.battleLevel || 1}** (${(u.battleExp || 0).toLocaleString()} EXP)`
+        );
+      } else if (['zoo', 'z', 'animal', 'animals'].includes(category)) {
+        const allUsers = await User.find(activeFilter, 'username zoo');
+        const animalPriceMap = new Map(ANIMALS.map((a) => [a.name, a.price]));
+
+        const scored = allUsers
+          .map((u) => {
+            let totalValue = 0;
+            let totalCount = 0;
+            for (const [name, count] of Object.entries(u.zoo || {})) {
+              if (count > 0) {
+                totalCount += count;
+                totalValue += (animalPriceMap.get(name) || 0) * count;
+              }
+            }
+            return { username: u.username, totalValue, totalCount };
+          })
+          .filter((u) => u.totalCount > 0)
+          .sort((a, b) => b.totalValue - a.totalValue || b.totalCount - a.totalCount)
+          .slice(0, 10);
+
+        title = '🐾 တိရစ္ဆာန်ရုံ တန်ဖိုးအမြင့်ဆုံး ကစားသမားများ (Top 10)';
+        color = '#2ECC71';
+        lines = scored.map(
+          (u, idx) => `${medals[idx]} **${u.username}** — 💵 **${u.totalValue.toLocaleString()} coins** (${u.totalCount.toLocaleString()} ကောင်)`
+        );
+      } else {
+        const sorted = await User.find(activeFilter).sort({ balance: -1 }).limit(10);
+        title = '🏆 အချမ်းသာဆုံး ကစားသမားများ (Top 10)';
+        color = '#FF4500';
+        lines = sorted.map(
+          (u, idx) => `${medals[idx]} **${u.username}** (Lv.${u.level || 1}) — 💰 **${(u.balance || 0).toLocaleString()} coins**`
+        );
+      }
+
+      if (lines.length === 0) {
+        return message.reply('စာရင်း မရှိသေးပါ။');
+      }
 
       const topEmbed = new EmbedBuilder()
-        .setColor('#FF4500')
-        .setTitle('🏆 အချမ်းသာဆုံး ကစားသမားများ (Top 5)')
-        .setDescription(leaderboard)
-        .setFooter({ text: 'အလုပ်လုပ်ပြီး ပိုက်ဆံရှာရန် Kwork ကို ရိုက်ပါ' })
+        .setColor(color)
+        .setTitle(title)
+        .setDescription(lines.join('\n'))
+        .setFooter({ text: 'အခြားစာရင်းများ: Ktop cash | Ktop lvl | Ktop battle | Ktop zoo' })
         .setTimestamp();
 
       return message.reply({ embeds: [topEmbed] });
     },
   },
 
-  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop - Rank 1 မှ Rank 3 အထိ ၃ မျိုး = ၉ ခု)
+  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop)
   {
     names: ['shop'],
     async execute(message, args, user) {
@@ -268,7 +321,7 @@ module.exports = [
     },
   },
 
-  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id> - တစ်မျိုးလျှင် တစ်ခုသာ သုံးခွင့်ရှိသည်)
+  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id>)
   {
     names: ['buy'],
     async execute(message, args, user) {
@@ -287,7 +340,6 @@ module.exports = [
         );
       }
 
-      // အမျိုးအစားတူ (luck / extra / multiplier) တစ်ခုခု လက်ရှိသုံးနေဆဲဆိုလျှင် ဝယ်ခွင့်ပိတ်ခြင်း
       const activeSameType = getActiveItemByType(user, item.type);
       if (activeSameType) {
         const activeRank = ITEM_RANKS[activeSameType.rank] || ITEM_RANKS[1];
@@ -350,7 +402,6 @@ module.exports = [
         );
       }
 
-      // Storage ထဲမှ ၁ ခု နုတ်ပြီး Active Slot ထဲသို့ တပ်ဆင်ခြင်း
       if (storedCount - 1 <= 0) {
         delete user.storedItems[itemId];
       } else {
@@ -384,7 +435,6 @@ module.exports = [
         sections.push(`🎁 **Lucky Crate (\`lc\`)** — **${crateCount} လုံး** *(\`Kopen lc [အရေအတွက်/all]\` ဖြင့် ဖွင့်ပါ)*`);
       }
 
-      // ၁။ လက်ရှိ တပ်ဆင်အသုံးပြုနေသော ပစ္စည်းများ (တစ်မျိုးလျှင် ၁ ခုစီ)
       const activeLines = [];
       for (const t of ['luck', 'extra', 'multiplier']) {
         const activeItem = getActiveItemByType(user, t);
@@ -404,7 +454,6 @@ module.exports = [
         sections.push(`⚔️ **လက်ရှိ အသုံးပြုနေသော ပစ္စည်းများ (Active — 1 Per Type):**\n${activeLines.join('\n')}`);
       }
 
-      // ၂။ အိတ်ထဲတွင် သိမ်းထားသော အပိုပစ္စည်းများ (Kuse <id> ဖြင့် သုံးရန်)
       const storedEntries = Object.entries(user.storedItems || {}).filter(([, count]) => count > 0);
       if (storedEntries.length > 0) {
         const storedLines = storedEntries
