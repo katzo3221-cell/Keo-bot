@@ -1,7 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getUser, addExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
-const { findItemById, useCategoryItems } = require('../data/shopItems');
 
 function findAnimal(query) {
   const q = query.toLowerCase().trim();
@@ -46,19 +45,11 @@ function getBattleStats(userObj) {
     team = team.slice(0, 3);
   }
 
-  let itemPower = 0;
-  for (const itemId of userObj.items || []) {
-    const itemInfo = findItemById(itemId);
-    if (itemInfo && itemInfo.powerBonus) {
-      itemPower += itemInfo.powerBonus;
-    }
-  }
-
   const basePower = team.reduce((sum, a) => sum + a.price, 0);
   const levelBonus = (userObj.level || 1) * 25;
-  const totalPower = basePower + levelBonus + itemPower + Math.floor(Math.random() * 200);
+  const totalPower = basePower + levelBonus + Math.floor(Math.random() * 200);
 
-  return { team, totalPower, itemPower, basePower, isCustomTeam };
+  return { team, totalPower, basePower, isCustomTeam };
 }
 
 // Kteam / Kb select လုပ်ဆောင်ချက်
@@ -239,10 +230,6 @@ module.exports = [
             await i.update({ content: '', embeds: [fightingEmbed], components: [] });
             await sleep(1500);
 
-            const myBrokenText = useCategoryItems(freshUser, 'battle');
-            const oppBrokenText = useCategoryItems(freshOppUser, 'battle');
-            const allBrokenText = `${myBrokenText}${oppBrokenText}`;
-
             if (freshMyStats.totalPower >= freshOppStats.totalPower) {
               const gainedExp = Math.floor(Math.random() * 31) + 45;
               const isLevelUp = addExp(freshUser, gainedExp);
@@ -261,7 +248,6 @@ module.exports = [
               if (isLevelUp) {
                 resultText += `\n🎊 **LEVEL UP!** **${message.author.username}** သည် **Level ${freshUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
-              resultText += allBrokenText;
 
               fightingEmbed.setColor('#2ECC71').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
             } else {
@@ -282,7 +268,6 @@ module.exports = [
               if (oppLevelUp) {
                 resultText += `\n🎊 **LEVEL UP!** **${opponentMention.username}** သည် **Level ${freshOppUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
-              resultText += allBrokenText;
 
               fightingEmbed.setColor('#E74C3C').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
             }
@@ -325,8 +310,6 @@ module.exports = [
       const msg = await message.reply({ embeds: [battleEmbed] });
       await sleep(1500);
 
-      const brokenItemText = useCategoryItems(user, 'battle');
-
       if (myStats.totalPower >= enemyPower) {
         const gainedExp = Math.floor(Math.random() * 31) + 30;
         const isLevelUp = addExp(user, gainedExp);
@@ -343,7 +326,6 @@ module.exports = [
         if (isLevelUp) {
           winText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
-        winText += brokenItemText;
 
         battleEmbed.setColor('#2ECC71').setDescription(winText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       } else {
@@ -355,7 +337,6 @@ module.exports = [
         if (isLevelUp) {
           loseText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
-        loseText += brokenItemText;
 
         battleEmbed.setColor('#E74C3C').setDescription(loseText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       }
