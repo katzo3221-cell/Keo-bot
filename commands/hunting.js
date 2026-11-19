@@ -444,21 +444,52 @@ module.exports = [
 
       if (rankMap[firstArg]) {
         const rankTag = rankMap[firstArg];
+
+        // Battle Team ထဲတွင် ထည့်ထားသော အကောင်အရေအတွက်များကို ရေတွက်ချန်ထားခြင်း
+        const protectedCounts = {};
+        for (const id of user.battleTeam || []) {
+          const info = ANIMALS.find((a) => a.id === id);
+          if (!info) continue;
+          const owned = (user.zoo && user.zoo[info.name]) || 0;
+          const alreadyProtected = protectedCounts[info.name] || 0;
+          if (owned > alreadyProtected) {
+            protectedCounts[info.name] = alreadyProtected + 1;
+          }
+        }
+
         let rankEarned = 0;
         let soldTotal = 0;
+        let keptTotal = 0;
 
         for (const [name, count] of entries) {
           if (name.includes(rankTag)) {
             const info = ANIMALS.find((a) => a.name === name);
-            if (info) {
-              rankEarned += info.price * count;
-              soldTotal += count;
+            if (!info) continue;
+
+            const keepCount = Math.min(count, protectedCounts[name] || 0);
+            const sellCount = count - keepCount;
+
+            if (keepCount > 0) {
+              user.zoo[name] = keepCount;
+              keptTotal += keepCount;
+            } else {
               delete user.zoo[name];
+            }
+
+            if (sellCount > 0) {
+              rankEarned += info.price * sellCount;
+              soldTotal += sellCount;
             }
           }
         }
 
         if (soldTotal === 0) {
+          if (keptTotal > 0) {
+            return message.reply(
+              `🛡️ ရောင်းစရာ **${rankTag}** အကောင် မရှိပါဘူး! လက်ကျန် **${keptTotal} ကောင်** လုံးက **Battle Team** ထဲမှာ တပ်ဆင်ထားပါတယ်။\n` +
+              '*(အဲဒီအကောင်တွေကိုပါ ရောင်းချင်ရင် `Kteam clear` အရင်ရိုက်ပါ)*'
+            );
+          }
           return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ **${rankTag}** အကောင် မရှိပါဘူး။`);
         }
 
@@ -467,8 +498,12 @@ module.exports = [
         user.markModified('zoo');
         await user.save();
 
+        const keepNote = keptTotal > 0
+          ? `\n🛡️ *(Battle Team ထဲမှ **${rankTag}** အကောင် **${keptTotal} ကောင်** ကို မရောင်းဘဲ ချန်ထားပေးထားပါသည်)*`
+          : '';
+
         return message.reply(
-          `💵 **${rankTag}** တိရစ္ဆာန် စုစုပေါင်း **${soldTotal} ကောင်** ကို ရောင်းချလိုက်ရာ **+${rankEarned.toLocaleString()} coins** ရရှိပါပြီ!`
+          `💵 **${rankTag}** တိရစ္ဆာန် စုစုပေါင်း **${soldTotal.toLocaleString()} ကောင်** ကို ရောင်းချလိုက်ရာ **+${rankEarned.toLocaleString()} coins** ရရှိပါပြီ!${keepNote}`
         );
       }
 
