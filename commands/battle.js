@@ -1,20 +1,16 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getUser, addBattleExp } = require('../models/User');
+const { getUser, addBattleExp, updateQuestProgress } = require('../models/User');
+const { findAnimal } = require('../utils/helpers');
 const ANIMALS = require('../data/animals');
 
-function findAnimal(query) {
-  const q = query.toLowerCase().trim();
-  return (
-    ANIMALS.find((a) => a.id.toLowerCase() === q) ||
-    ANIMALS.find((a) => a.name.toLowerCase() === q) ||
-    ANIMALS.find((a) => a.name.split(' (')[0].toLowerCase() === q)
-  );
+// တိရစ္ဆာန်ရုံထဲတွင် အကောင်ရှိမရှိ စစ်ဆေးခြင်း
+function hasAnyAnimal(userObj) {
+  return Object.values(userObj.zoo || {}).some((count) => count > 0);
 }
 
-// တိရစ္ဆာန်အဖွဲ့ နှင့် Battle Level Power တွက်ချက်ခြင်း
+// ကစားသမား ကိုယ်တိုင်ရွေးထားသော Battle Team နှင့် Level Power တွက်ချက်ခြင်း
 function getBattleStats(userObj) {
-  let team = [];
-  let isCustomTeam = false;
+  const team = [];
 
   if (userObj.battleTeam && userObj.battleTeam.length > 0) {
     const usedCounts = {};
@@ -28,39 +24,26 @@ function getBattleStats(userObj) {
         usedCounts[info.name] = used + 1;
       }
     }
-    if (team.length > 0) isCustomTeam = true;
-  }
-
-  if (team.length === 0) {
-    const entries = Object.entries(userObj.zoo || {});
-    for (const [name, count] of entries) {
-      const info = ANIMALS.find((a) => a.name === name);
-      if (info) {
-        for (let i = 0; i < count; i++) {
-          team.push(info);
-        }
-      }
-    }
-    team.sort((a, b) => b.price - a.price);
-    team = team.slice(0, 3);
   }
 
   const bLevel = userObj.battleLevel || 1;
   const basePower = team.reduce((sum, a) => sum + a.price, 0);
-  const levelBonus = bLevel * 25;
+  // Level 1 ဆင့်တက်တိုင်း Base Power +2% နှင့် အခြေခံ +25 Power တိုးပေးမည်
+  const levelPercent = (bLevel - 1) * 2;
+  const levelBonus = Math.floor(basePower * (levelPercent / 100)) + (bLevel * 25);
   const totalPower = basePower + levelBonus + Math.floor(Math.random() * 200);
 
-  return { team, totalPower, basePower, isCustomTeam, battleLevel: bLevel };
+  return { team, totalPower, basePower, levelBonus, levelPercent, battleLevel: bLevel };
 }
 
 // Kteam / Kb select လုပ်ဆောင်ချက်
 async function handleTeamCommand(message, args, user) {
   const sub = args[0]?.toLowerCase();
 
-  if (sub === 'clear' || sub === 'reset' || sub === 'auto') {
+  if (sub === 'clear' || sub === 'reset') {
     user.battleTeam = [];
     await user.save();
-    return message.reply('✅ စိတ်ကြိုက်တိုက်ပွဲအဖွဲ့ကို ဖျက်သိမ်းလိုက်ပါပြီ! နောက်ပိုင်း `Kbattle` တွင် အကောင်းဆုံး ၃ ကောင်ကို အလိုအလျောက် ရွေးပေးပါမယ်။');
+    return message.reply('✅ တိုက်ပွဲအဖွဲ့ (Battle Team) ကို ဖျက်သိမ်းလိုက်ပါပြီ! နောက်ထပ် `Kbattle` ဝင်လိုပါက `Kteam <id1> [id2] [id3]` ဖြင့် အကောင်အသစ် ပြန်ရွေးချယ်ပါ။');
   }
 
   const picks = sub === 'set' ? args.slice(1) : args;
@@ -75,7 +58,7 @@ async function handleTeamCommand(message, args, user) {
     for (const rawId of picks) {
       const animal = findAnimal(rawId);
       if (!animal) {
-        return message.reply(`❌ \`${rawId}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး! \`Kzoo\` ရိုက်ပြီး ID စစ်ဆေးပါ။`);
+        return message.reply(`❌ \`${rawId}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး! အမဲလိုက်ထားတဲ့ ID သို့မဟုတ် မြန်မာနာမည် မှန်ကန်စွာ ထည့်ပါ။`);
       }
       neededCounts[animal.name] = (neededCounts[animal.name] || 0) + 1;
       const owned = (user.zoo && user.zoo[animal.name]) || 0;
@@ -99,10 +82,15 @@ async function handleTeamCommand(message, args, user) {
 
   const stats = getBattleStats(user);
   if (stats.team.length === 0) {
-    return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+    if (!hasAnyAnimal(user)) {
+      return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+    }
+    return message.reply(
+      '❌ တိုက်ပွဲဝင်မယ့် အဖွဲ့ (Battle Team) မရွေးချယ်ရသေးပါဘူး!\n' +
+      '`Kteam <id1> [id2] [id3]` ရိုက်ပြီး အများဆုံး **၃ ကောင်** ကိုယ်တိုင်ရွေးချယ်ပါ။ (ဥပမာ - `Kteam lion tiger wolf`)'
+    );
   }
 
-  const modeLabel = stats.isCustomTeam ? '🎯 စိတ်ကြိုက်ရွေးထားသော အဖွဲ့' : '⚡ အလိုအလျောက် အကောင်းဆုံး အဖွဲ့ (Auto Top 3)';
   const currentList = stats.team
     .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Base Power: \`${a.price.toLocaleString()}\``)
     .join('\n');
@@ -110,8 +98,11 @@ async function handleTeamCommand(message, args, user) {
   const teamEmbed = new EmbedBuilder()
     .setColor('#E67E22')
     .setAuthor({ name: `${message.author.username} ၏ Battle Team (Battle Lv.${stats.battleLevel})`, iconURL: message.author.displayAvatarURL() })
-    .setDescription(`**ပုံစံ:** ${modeLabel}\n\n${currentList}`)
-    .addFields({ name: '💥 အဖွဲ့စုစုပေါင်း Base Power', value: `**${stats.basePower.toLocaleString()}**`, inline: true })
+    .setDescription(`**ပုံစံ:** 🎯 ကိုယ်တိုင်ရွေးထားသော အဖွဲ့\n\n${currentList}`)
+    .addFields(
+      { name: '💥 Base Power', value: `**${stats.basePower.toLocaleString()}**`, inline: true },
+      { name: `🔥 Level Bonus (+${stats.levelPercent}%)`, value: `**+${stats.levelBonus.toLocaleString()}**`, inline: true }
+    )
     .setFooter({ text: 'ပြောင်းရွေးရန်: Kteam <id1> [id2] [id3] | ပြန်ဖျက်ရန်: Kteam clear' });
 
   return message.reply({ embeds: [teamEmbed] });
@@ -136,7 +127,13 @@ module.exports = [
 
       const myStats = getBattleStats(user);
       if (myStats.team.length === 0) {
-        return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+        if (!hasAnyAnimal(user)) {
+          return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+        }
+        return message.reply(
+          '❌ တိုက်ပွဲဝင်ဖို့ **Battle Team** မရွေးချယ်ရသေးပါဘူး!\n' +
+          'အရင်ဆုံး `Kteam <id1> [id2] [id3]` ရိုက်ပြီး တိုက်ပွဲဝင်မယ့် အကောင်တွေကို ကိုယ်တိုင်ရွေးချယ်ပါ။'
+        );
       }
 
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -155,7 +152,7 @@ module.exports = [
         const oppUser = await getUser(opponentMention.id, opponentMention.username);
         const oppStats = getBattleStats(oppUser);
         if (oppStats.team.length === 0) {
-          return message.reply(`❌ **${opponentMention.username}** တွင် တိုက်ပွဲဝင်ရန် တိရစ္ဆာန် မရှိသေးပါ။`);
+          return message.reply(`❌ **${opponentMention.username}** သည် Battle Team မရွေးချယ်ရသေးပါ။ (\`Kteam <id1> [id2] [id3]\` ဖြင့် အရင်ရွေးချယ်ရပါမည်)`);
         }
 
         const oppTeamText = oppStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
@@ -215,7 +212,7 @@ module.exports = [
             if (freshMyStats.team.length === 0 || freshOppStats.team.length === 0) {
               const errEmbed = new EmbedBuilder()
                 .setColor('#E74C3C')
-                .setDescription('❌ ကစားသမားတစ်ဦးတွင် တိုက်ပွဲဝင်ရန် တိရစ္ဆာန် မရှိတော့သဖြင့် တိုက်ပွဲပျက်ပြယ်သွားပါပြီ။');
+                .setDescription('❌ ကစားသမားတစ်ဦးတွင် ရွေးချယ်ထားသော Battle Team မရှိတော့သဖြင့် တိုက်ပွဲပျက်ပြယ်သွားပါပြီ။');
               return i.update({ content: '', embeds: [errEmbed], components: [] });
             }
 
@@ -234,18 +231,19 @@ module.exports = [
             if (freshMyStats.totalPower >= freshOppStats.totalPower) {
               const gainedExp = Math.floor(Math.random() * 31) + 45;
               const isBattleLevelUp = addBattleExp(freshUser, gainedExp);
+              updateQuestProgress(freshUser, 'battleWin', 1);
               addBattleExp(freshOppUser, 10);
 
               let crateDropText = '';
               if (Math.random() < 0.20) {
                 freshUser.boxes = (freshUser.boxes || 0) + 1;
-                crateDropText = `\n🎁 PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်!`;
+                crateDropText = '\n🎁 PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်!';
               }
 
               await freshUser.save();
               await freshOppUser.save();
 
-              let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshMyStats.totalPower}\` vs \`${freshOppStats.totalPower}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်!${crateDropText}`;
+              let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshMyStats.totalPower.toLocaleString()}\` vs \`${freshOppStats.totalPower.toLocaleString()}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်!${crateDropText}`;
               if (isBattleLevelUp) {
                 resultText += `\n🔥 **BATTLE LEVEL UP!** **${message.author.username}** သည် **Battle Level ${freshUser.battleLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
@@ -254,6 +252,7 @@ module.exports = [
             } else {
               const gainedExp = Math.floor(Math.random() * 31) + 45;
               const oppBattleLevelUp = addBattleExp(freshOppUser, gainedExp);
+              updateQuestProgress(freshOppUser, 'battleWin', 1);
               addBattleExp(freshUser, 10);
 
               let crateDropText = '';
@@ -265,7 +264,7 @@ module.exports = [
               await freshUser.save();
               await freshOppUser.save();
 
-              let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshOppStats.totalPower}\` vs \`${freshMyStats.totalPower}\`)\n⚔️ **${opponentMention.username}** က **+${gainedExp} Battle EXP** ရရှိပြီး **${message.author.username}** သည် **+10 Battle EXP** ရရှိပါတယ်။${crateDropText}`;
+              let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshOppStats.totalPower.toLocaleString()}\` vs \`${freshMyStats.totalPower.toLocaleString()}\`)\n⚔️ **${opponentMention.username}** က **+${gainedExp} Battle EXP** ရရှိပြီး **${message.author.username}** သည် **+10 Battle EXP** ရရှိပါတယ်။${crateDropText}`;
               if (oppBattleLevelUp) {
                 resultText += `\n🔥 **BATTLE LEVEL UP!** **${opponentMention.username}** သည် **Battle Level ${freshOppUser.battleLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
@@ -314,17 +313,18 @@ module.exports = [
       if (myStats.totalPower >= enemyPower) {
         const gainedExp = Math.floor(Math.random() * 31) + 30;
         const isBattleLevelUp = addBattleExp(user, gainedExp);
+        updateQuestProgress(user, 'battleWin', 1);
 
         let crateDropText = '';
         if (Math.random() < 0.15) {
           user.boxes = (user.boxes || 0) + 1;
-          crateDropText = `\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်!`;
+          crateDropText = '\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်!';
         }
 
         await user.save();
 
         const bLevel = user.battleLevel || 1;
-        let winText = `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်! (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}`;
+        let winText = `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${enemyPower.toLocaleString()}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်! (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}`;
         if (isBattleLevelUp) {
           winText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
@@ -336,7 +336,7 @@ module.exports = [
         await user.save();
 
         const bLevel = user.battleLevel || 1;
-        let loseText = `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n📖 **+${loseExp} Battle EXP** ရရှိပါတယ်။ (${user.battleExp}/${bLevel * 100} EXP)`;
+        let loseText = `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${enemyPower.toLocaleString()}\`)\n📖 **+${loseExp} Battle EXP** ရရှိပါတယ်။ (${user.battleExp}/${bLevel * 100} EXP)`;
         if (isBattleLevelUp) {
           loseText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }

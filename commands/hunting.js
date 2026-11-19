@@ -257,51 +257,104 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz)
+  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
   {
-    names: ['zoo', 'z'],
-    async execute(message, args, user) {
+    names: ['zoo', 'z', 'zooid'],
+    async execute(message, args, user, commandName) {
       const zooData = user.zoo || {};
-      let totalValue = 0;
-      let totalAnimals = 0;
-      const rankLines = [];
+      const hasAnimals = ANIMALS.some((a) => (zooData[a.name] || 0) > 0);
 
-      for (const rankInfo of RANKS) {
-        const rankTag = `(${rankInfo.name})`;
-        const ownedInRank = ANIMALS.filter((a) => a.name.endsWith(rankTag) && (zooData[a.name] || 0) > 0);
-
-        if (ownedInRank.length > 0) {
-          const emojiList = ownedInRank
-            .map((a) => {
-              const count = zooData[a.name];
-              totalValue += a.price * count;
-              totalAnimals += count;
-              return `${a.emoji}\`×${count}\``;
-            })
-            .join(' ');
-
-          rankLines.push(`${rankInfo.emoji} **${rankInfo.name}** ➔ ${emojiList}`);
-        }
-      }
-
-      if (rankLines.length === 0) {
+      if (!hasAnimals) {
         return message.reply('🏞️ သင့်တိရစ္ဆာန်ရုံထဲမှာ ဘာမှ မရှိသေးပါဘူး။ `Khunt` ရိုက်ပြီး ဖမ်းကြည့်ပါ!');
       }
 
-      const zooEmbed = new EmbedBuilder()
-        .setColor('#2ECC71')
-        .setAuthor({ name: `${message.author.username} ၏ တိရစ္ဆာန်ရုံ (Zoo)`, iconURL: message.author.displayAvatarURL() })
-        .setDescription(rankLines.join('\n\n'))
-        .addFields(
-          { name: '🐾 စုစုပေါင်း အကောင်ရေ', value: `**${totalAnimals.toLocaleString()} ကောင်**`, inline: true },
-          { name: '💵 စုစုပေါင်း တန်ဖိုး', value: `**${totalValue.toLocaleString()} coins**`, inline: true }
-        )
-        .setFooter({ text: 'ရောင်းရန်: Ksell <id> [အရေအတွက်] သို့မဟုတ် Ksell all' });
+      const buildZooEmbed = (showIds) => {
+        let totalValue = 0;
+        let totalAnimals = 0;
+        const rankLines = [];
 
-      return message.reply({ embeds: [zooEmbed] });
+        // ID ပြသည့်အခါ Kteam ရွေးရလွယ်အောင် အားအကောင်းဆုံး Rank (Celestial) မှ အပေါ်ဆုံး စီပြမည်
+        const ranksOrder = showIds ? [...RANKS].reverse() : RANKS;
+
+        for (const rankInfo of ranksOrder) {
+          const rankTag = `(${rankInfo.name})`;
+          const ownedInRank = ANIMALS.filter((a) => a.name.endsWith(rankTag) && (zooData[a.name] || 0) > 0);
+
+          if (ownedInRank.length > 0) {
+            const listText = ownedInRank
+              .map((a) => {
+                const count = zooData[a.name];
+                totalValue += a.price * count;
+                totalAnimals += count;
+                return showIds
+                  ? `${a.emoji}\`${a.id}\`×${count}`
+                  : `${a.emoji}\`×${count}\``;
+              })
+              .join(' ');
+
+            rankLines.push(`${rankInfo.emoji} **${rankInfo.name}** ➔ ${listText}`);
+          }
+        }
+
+        let desc = rankLines.join('\n\n');
+        if (desc.length > 4000) {
+          desc = desc.slice(0, 3950) + '\n... *(အကောင်များလွန်းသဖြင့် အချို့ကို ချုံ့ပြထားပါသည်)*';
+        }
+
+        return new EmbedBuilder()
+          .setColor(showIds ? '#3498DB' : '#2ECC71')
+          .setAuthor({
+            name: `${message.author.username} ၏ တိရစ္ဆာန်ရုံ (${showIds ? 'ID စာရင်း — အားအကောင်းဆုံးမှ အစဉ်လိုက်' : 'Zoo'})`,
+            iconURL: message.author.displayAvatarURL(),
+          })
+          .setDescription(desc)
+          .addFields(
+            { name: '🐾 စုစုပေါင်း အကောင်ရေ', value: `**${totalAnimals.toLocaleString()} ကောင်**`, inline: true },
+            { name: '💵 စုစုပေါင်း တန်ဖိုး', value: `**${totalValue.toLocaleString()} coins**`, inline: true }
+          )
+          .setFooter({
+            text: showIds
+              ? 'အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell <id> [အရေအတွက်]'
+              : 'ID ကြည့်ရန်: Kzoo id | အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell all',
+          });
+      };
+
+      const buildToggleRow = (showIds) =>
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('zoo_toggle_id')
+            .setLabel(showIds ? '🐾 အကျဉ်းကြည့်ရန် (Emoji Only)' : '🆔 ID များကြည့်ရန် (For Kteam)')
+            .setStyle(showIds ? ButtonStyle.Secondary : ButtonStyle.Primary)
+        );
+
+      let showIds = commandName === 'zooid' || ['id', 'ids', 'list'].includes(args[0]?.toLowerCase());
+
+      const zooMsg = await message.reply({
+        embeds: [buildZooEmbed(showIds)],
+        components: [buildToggleRow(showIds)],
+      });
+
+      const collector = zooMsg.createMessageComponentCollector({ time: 60000 });
+
+      collector.on('collect', async (i) => {
+        if (i.user.id !== message.author.id) {
+          return i.reply({ content: '❌ ဒါက သင့်ရဲ့ တိရစ္ဆာန်ရုံ မဟုတ်ပါဘူး!', ephemeral: true });
+        }
+
+        if (i.customId === 'zoo_toggle_id') {
+          showIds = !showIds;
+          await i.update({
+            embeds: [buildZooEmbed(showIds)],
+            components: [buildToggleRow(showIds)],
+          });
+        }
+      });
+
+      collector.on('end', async () => {
+        await zooMsg.edit({ components: [] }).catch(() => {});
+      });
     },
   },
-
   // ၃။ တိရစ္ဆာန် ရောင်းချခြင်း (Ksell all / Ksell <id> [count/all] / Ksell <rank>)
   {
     names: ['sell', 'sellall'],
