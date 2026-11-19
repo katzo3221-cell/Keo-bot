@@ -28,7 +28,29 @@ module.exports = [
     },
   },
 
-  // ၂။ စကားပြန်ပြောခိုင်းခြင်း (Krepeat / Krep / Ksay)
+  // ၂။ Discord Profile ပုံ ကြည့်ရှုခြင်း (Kavater / Kavatar / Kav / Kpfp)
+  {
+    names: ['avater', 'avatar', 'av', 'pfp'],
+    async execute(message) {
+      const target = message.mentions.users.first() || message.author;
+      const avatarUrl = target.displayAvatarURL({ size: 1024 });
+      const pngUrl = target.displayAvatarURL({ extension: 'png', size: 1024 });
+      const jpgUrl = target.displayAvatarURL({ extension: 'jpg', size: 1024 });
+      const webpUrl = target.displayAvatarURL({ extension: 'webp', size: 1024 });
+
+      const avatarEmbed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`🖼️ ${target.username} ၏ Profile ပုံ (Avatar)`)
+        .setDescription(`[PNG](${pngUrl}) • [JPG](${jpgUrl}) • [WEBP](${webpUrl})`)
+        .setImage(avatarUrl)
+        .setFooter({ text: `Requested by ${message.author.username}`, iconURL: message.author.displayAvatarURL() })
+        .setTimestamp();
+
+      return message.reply({ embeds: [avatarEmbed] });
+    },
+  },
+
+  // ၃။ စကားပြန်ပြောခိုင်းခြင်း (Krepeat / Krep / Ksay)
   {
     names: ['repeat', 'rep', 'say'],
     async execute(message, args) {
@@ -68,7 +90,7 @@ module.exports = [
     },
   },
 
-  // ၃။ Command စာရင်းကြည့်ရန် (Khelp)
+  // ၄။ Command စာရင်းကြည့်ရန် (Khelp)
   {
     names: ['help'],
     async execute(message) {
@@ -81,7 +103,7 @@ module.exports = [
           { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`), `Kbattle @user`, `Kteam <id1> [id2] [id3]`, `Kteam clear`' },
           { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
-          { name: '🛠️ Utility & Profile', value: '`Kprofile` (`Klvl`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
+          { name: '🛠️ Utility & Profile', value: '`Kprofile` (`Klvl`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
         )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 

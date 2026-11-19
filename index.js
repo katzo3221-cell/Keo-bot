@@ -14,7 +14,7 @@ const client = new Client({
   ],
 });
 
-// Anti-Spam Cooldown Map
+// Anti-Spam Cooldown Map (Command တစ်ခုချင်းစီအလိုက် ခွဲမှတ်မည်)
 const cooldowns = new Map();
 
 // commands/ ဖိုဒါထဲမှ Command ဖိုင်အားလုံးကို အလိုအလျောက် ဖတ်ယူခြင်း
@@ -49,12 +49,13 @@ client.on('messageCreate', async (message) => {
   const commandObj = commandMap.get(commandName);
   if (!commandObj) return;
 
-  // Anti-Spam Cooldown စစ်ဆေးခြင်း (၈ စက္ကန့်)
+  // တူညီသော Command တစ်ခုတည်းကို ဆက်တိုက်ရိုက်မှသာ ၈ စက္ကန့် Cooldown စစ်ဆေးခြင်း
   const nowTime = Date.now();
   const cooldownAmount = 8000;
+  const cooldownKey = `${message.author.id}_${commandObj.names[0]}`;
 
-  if (cooldowns.has(message.author.id)) {
-    const userData = cooldowns.get(message.author.id);
+  if (cooldowns.has(cooldownKey)) {
+    const userData = cooldowns.get(cooldownKey);
     const expirationTime = userData.timestamp + cooldownAmount;
 
     if (nowTime < expirationTime) {
@@ -72,8 +73,8 @@ client.on('messageCreate', async (message) => {
     clearTimeout(userData.timeoutId);
   }
 
-  const timeoutId = setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
-  cooldowns.set(message.author.id, { timestamp: nowTime, spamCount: 0, timeoutId });
+  const timeoutId = setTimeout(() => cooldowns.delete(cooldownKey), cooldownAmount);
+  cooldowns.set(cooldownKey, { timestamp: nowTime, spamCount: 0, timeoutId });
 
   try {
     const user = await getUser(message.author.id, message.author.username);
