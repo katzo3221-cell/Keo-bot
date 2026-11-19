@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getUser, addExp } = require('../models/User');
+const { getUser, addBattleExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
 
 function findAnimal(query) {
@@ -11,7 +11,7 @@ function findAnimal(query) {
   );
 }
 
-// တိရစ္ဆာန်အဖွဲ့ (စိတ်ကြိုက်ရွေးထားသော ၃ ကောင် သို့မဟုတ် Top 3) နှင့် Power တွက်ချက်ခြင်း
+// တိရစ္ဆာန်အဖွဲ့ နှင့် Battle Level Power တွက်ချက်ခြင်း
 function getBattleStats(userObj) {
   let team = [];
   let isCustomTeam = false;
@@ -45,11 +45,12 @@ function getBattleStats(userObj) {
     team = team.slice(0, 3);
   }
 
+  const bLevel = userObj.battleLevel || 1;
   const basePower = team.reduce((sum, a) => sum + a.price, 0);
-  const levelBonus = (userObj.level || 1) * 25;
+  const levelBonus = bLevel * 25;
   const totalPower = basePower + levelBonus + Math.floor(Math.random() * 200);
 
-  return { team, totalPower, basePower, isCustomTeam };
+  return { team, totalPower, basePower, isCustomTeam, battleLevel: bLevel };
 }
 
 // Kteam / Kb select လုပ်ဆောင်ချက်
@@ -108,7 +109,7 @@ async function handleTeamCommand(message, args, user) {
 
   const teamEmbed = new EmbedBuilder()
     .setColor('#E67E22')
-    .setAuthor({ name: `${message.author.username} ၏ Battle Team`, iconURL: message.author.displayAvatarURL() })
+    .setAuthor({ name: `${message.author.username} ၏ Battle Team (Battle Lv.${stats.battleLevel})`, iconURL: message.author.displayAvatarURL() })
     .setDescription(`**ပုံစံ:** ${modeLabel}\n\n${currentList}`)
     .addFields({ name: '💥 အဖွဲ့စုစုပေါင်း Base Power', value: `**${stats.basePower.toLocaleString()}**`, inline: true })
     .setFooter({ text: 'ပြောင်းရွေးရန်: Kteam <id1> [id2] [id3] | ပြန်ဖျက်ရန်: Kteam clear' });
@@ -125,7 +126,7 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP with Accept/Reject Buttons (Kbattle / Kb)
+  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP (Battle Level သီးသန့်တက်သည်)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
@@ -142,7 +143,7 @@ module.exports = [
       const myTeamText = myStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
       const opponentMention = message.mentions.users.first();
 
-      // PvP Battle (စိန်ခေါ်ခံရသူမှ Accept / Reject ခလုတ်နှိပ်၍ ရွေးချယ်ခြင်း)
+      // PvP Battle
       if (opponentMention) {
         if (opponentMention.bot) {
           return message.reply('❌ Bot များကို စိန်ခေါ်၍ မရပါ။');
@@ -162,7 +163,7 @@ module.exports = [
           .setColor('#9B59B6')
           .setTitle(`⚔️ PvP စိန်ခေါ်မှု: ${message.author.username} VS ${opponentMention.username}`)
           .setDescription(
-            `**${message.author.username}** (Lv.${user.level}) က **${opponentMention.username}** (Lv.${oppUser.level}) ကို တိရစ္ဆာန်တိုက်ပွဲ စိန်ခေါ်လိုက်ပါပြီ!\n` +
+            `**${message.author.username}** (Battle Lv.${myStats.battleLevel}) က **${opponentMention.username}** (Battle Lv.${oppStats.battleLevel}) ကို တိရစ္ဆာန်တိုက်ပွဲ စိန်ခေါ်လိုက်ပါပြီ!\n` +
             `<@${opponentMention.id}> အနေဖြင့် **၃၀ စက္ကန့်အတွင်း** လက်ခံမလား၊ ငြင်းပယ်မလား ရွေးချယ်ပါ —`
           )
           .addFields(
@@ -220,7 +221,7 @@ module.exports = [
 
             const fightingEmbed = new EmbedBuilder()
               .setColor('#F39C12')
-              .setTitle(`⚔️ PvP: ${message.author.username} (Lv.${freshUser.level}) VS ${opponentMention.username} (Lv.${freshOppUser.level})`)
+              .setTitle(`⚔️ PvP: ${message.author.username} (Battle Lv.${freshMyStats.battleLevel}) VS ${opponentMention.username} (Battle Lv.${freshOppStats.battleLevel})`)
               .addFields(
                 { name: `🛡️ ${message.author.username}`, value: freshMyStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n'), inline: true },
                 { name: `🔥 ${opponentMention.username}`, value: freshOppStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n'), inline: true }
@@ -232,41 +233,41 @@ module.exports = [
 
             if (freshMyStats.totalPower >= freshOppStats.totalPower) {
               const gainedExp = Math.floor(Math.random() * 31) + 45;
-              const isLevelUp = addExp(freshUser, gainedExp);
-              addExp(freshOppUser, 10);
+              const isBattleLevelUp = addBattleExp(freshUser, gainedExp);
+              addBattleExp(freshOppUser, 10);
 
-              let boxDropText = '';
+              let crateDropText = '';
               if (Math.random() < 0.20) {
                 freshUser.boxes = (freshUser.boxes || 0) + 1;
-                boxDropText = `\n🎁 PvP အောင်ပွဲဆု **Mystery Box +1** ရရှိပါတယ်!`;
+                crateDropText = `\n🎁 PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်!`;
               }
 
               await freshUser.save();
               await freshOppUser.save();
 
-              let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshMyStats.totalPower}\` vs \`${freshOppStats.totalPower}\`)\n✨ **+${gainedExp} EXP** ရရှိပါတယ်!${boxDropText}`;
-              if (isLevelUp) {
-                resultText += `\n🎊 **LEVEL UP!** **${message.author.username}** သည် **Level ${freshUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+              let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshMyStats.totalPower}\` vs \`${freshOppStats.totalPower}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်!${crateDropText}`;
+              if (isBattleLevelUp) {
+                resultText += `\n🔥 **BATTLE LEVEL UP!** **${message.author.username}** သည် **Battle Level ${freshUser.battleLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
 
               fightingEmbed.setColor('#2ECC71').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
             } else {
               const gainedExp = Math.floor(Math.random() * 31) + 45;
-              const oppLevelUp = addExp(freshOppUser, gainedExp);
-              addExp(freshUser, 10);
+              const oppBattleLevelUp = addBattleExp(freshOppUser, gainedExp);
+              addBattleExp(freshUser, 10);
 
-              let boxDropText = '';
+              let crateDropText = '';
               if (Math.random() < 0.20) {
                 freshOppUser.boxes = (freshOppUser.boxes || 0) + 1;
-                boxDropText = `\n🎁 **${opponentMention.username}** သည် PvP အောင်ပွဲဆု **Mystery Box +1** ရရှိပါတယ်!`;
+                crateDropText = `\n🎁 **${opponentMention.username}** သည် PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်!`;
               }
 
               await freshUser.save();
               await freshOppUser.save();
 
-              let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshOppStats.totalPower}\` vs \`${freshMyStats.totalPower}\`)\n✨ **${opponentMention.username}** က **+${gainedExp} EXP** ရရှိပြီး **${message.author.username}** သည် **+10 EXP** ရရှိပါတယ်။${boxDropText}`;
-              if (oppLevelUp) {
-                resultText += `\n🎊 **LEVEL UP!** **${opponentMention.username}** သည် **Level ${freshOppUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+              let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshOppStats.totalPower}\` vs \`${freshMyStats.totalPower}\`)\n⚔️ **${opponentMention.username}** က **+${gainedExp} Battle EXP** ရရှိပြီး **${message.author.username}** သည် **+10 Battle EXP** ရရှိပါတယ်။${crateDropText}`;
+              if (oppBattleLevelUp) {
+                resultText += `\n🔥 **BATTLE LEVEL UP!** **${opponentMention.username}** သည် **Battle Level ${freshOppUser.battleLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
               }
 
               fightingEmbed.setColor('#E74C3C').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
@@ -288,7 +289,7 @@ module.exports = [
         return;
       }
 
-      // Solo Wild Battle (တောရိုင်းအဖွဲ့နှင့် တိုက်ခိုက်ခြင်း)
+      // Solo Wild Battle
       const enemyTeam = [
         ANIMALS[Math.floor(Math.random() * 65)],
         ANIMALS[Math.floor(Math.random() * 85)],
@@ -300,7 +301,7 @@ module.exports = [
 
       const battleEmbed = new EmbedBuilder()
         .setColor('#E67E22')
-        .setTitle(`⚔️ ${message.author.username} (Lv.${user.level}) ၏ တိရစ္ဆာန်တိုက်ပွဲ`)
+        .setTitle(`⚔️ ${message.author.username} (Battle Lv.${myStats.battleLevel}) ၏ တိရစ္ဆာန်တိုက်ပွဲ`)
         .addFields(
           { name: '🛡️ သင့်အဖွဲ့ (Your Team)', value: myTeamText, inline: true },
           { name: '👹 ရန်သူ့အဖွဲ့ (Wild Team)', value: enemyTeamText, inline: true }
@@ -312,30 +313,32 @@ module.exports = [
 
       if (myStats.totalPower >= enemyPower) {
         const gainedExp = Math.floor(Math.random() * 31) + 30;
-        const isLevelUp = addExp(user, gainedExp);
+        const isBattleLevelUp = addBattleExp(user, gainedExp);
 
-        let boxDropText = '';
+        let crateDropText = '';
         if (Math.random() < 0.15) {
           user.boxes = (user.boxes || 0) + 1;
-          boxDropText = `\n🎁 ရန်သူ့စခန်းမှ **Mystery Box +1** သိမ်းပိုက်ရရှိပါတယ်!`;
+          crateDropText = `\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်!`;
         }
 
         await user.save();
 
-        let winText = `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n✨ အတွေ့အကြုံ **+${gainedExp} EXP** ရရှိပါတယ်! (${user.exp}/${user.level * 100} EXP)${boxDropText}`;
-        if (isLevelUp) {
-          winText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+        const bLevel = user.battleLevel || 1;
+        let winText = `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်! (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}`;
+        if (isBattleLevelUp) {
+          winText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
 
         battleEmbed.setColor('#2ECC71').setDescription(winText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       } else {
         const loseExp = 5;
-        const isLevelUp = addExp(user, loseExp);
+        const isBattleLevelUp = addBattleExp(user, loseExp);
         await user.save();
 
-        let loseText = `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n📖 တိုက်ပွဲအတွေ့အကြုံ **+${loseExp} EXP** ရရှိပါတယ်။ (${user.exp}/${user.level * 100} EXP)`;
-        if (isLevelUp) {
-          loseText += `\n🎊 **LEVEL UP!** သင်သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+        const bLevel = user.battleLevel || 1;
+        let loseText = `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower}\` vs \`${enemyPower}\`)\n📖 **+${loseExp} Battle EXP** ရရှိပါတယ်။ (${user.battleExp}/${bLevel * 100} EXP)`;
+        if (isBattleLevelUp) {
+          loseText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
 
         battleEmbed.setColor('#E74C3C').setDescription(loseText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });

@@ -1,28 +1,46 @@
 const { EmbedBuilder } = require('discord.js');
+const { DAILY_PROFILE_EXP_LIMIT } = require('../models/User');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function getTodayMyanmarDate() {
+  return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 module.exports = [
-  // ၁။ Level, EXP နှင့် Profile ကြည့်ရှုခြင်း (Kprofile / Klvl / Klevel)
+  // ၁။ Profile Level နှင့် Battle Level ခွဲပြခြင်း (Kprofile / Klvl / Klevel)
   {
     names: ['profile', 'lvl', 'level'],
     async execute(message, args, user) {
-      const neededExp = user.level * 100;
-      const progress = Math.min(10, Math.floor((user.exp / neededExp) * 10));
-      const progressBar = '🟦'.repeat(progress) + '⬜'.repeat(10 - progress);
+      const pLevel = user.level || 1;
+      const pExp = user.exp || 0;
+      const pNeeded = pLevel * 150;
+      const pProgress = Math.min(10, Math.floor((pExp / pNeeded) * 10));
+      const pBar = '🟦'.repeat(pProgress) + '⬜'.repeat(10 - pProgress);
+
+      const bLevel = user.battleLevel || 1;
+      const bExp = user.battleExp || 0;
+      const bNeeded = bLevel * 100;
+      const bProgress = Math.min(10, Math.floor((bExp / bNeeded) * 10));
+      const bBar = '🟥'.repeat(bProgress) + '⬜'.repeat(10 - bProgress);
+
+      const todayStr = getTodayMyanmarDate();
+      const todayExp = user.dailyProfileExpDate === todayStr ? (user.dailyProfileExpCount || 0) : 0;
 
       const profileEmbed = new EmbedBuilder()
         .setColor('#3498DB')
         .setAuthor({ name: `${message.author.username} ၏ ကိုယ်ရေးအကျဉ်း (Profile)`, iconURL: message.author.displayAvatarURL() })
         .addFields(
-          { name: '🏅 Level', value: `**Level ${user.level}**`, inline: true },
-          { name: '✨ EXP', value: `**${user.exp} / ${neededExp} EXP**`, inline: true },
+          { name: '🏅 Profile Level', value: `**Lv.${pLevel}** (${pExp}/${pNeeded} EXP)`, inline: true },
+          { name: '⚔️ Battle Level', value: `**Lv.${bLevel}** (${bExp}/${bNeeded} EXP)`, inline: true },
+          { name: '🎁 Lucky Crates (`lc`)', value: `**${user.boxes || 0} လုံး**`, inline: true },
           { name: '🔥 Daily Streak', value: `**${user.dailyStreak || 0} ရက်**`, inline: true },
-          { name: '🎁 Mystery Boxes', value: `**${user.boxes || 0} လုံး**`, inline: true },
           { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `**${(user.items || []).length} မျိုး**`, inline: true },
-          { name: '📊 Level တက်ရန် တိုးတက်မှု', value: `${progressBar} (${Math.floor((user.exp / neededExp) * 100)}%)` }
+          { name: '📅 ယနေ့ Profile EXP Limit', value: `**${todayExp.toLocaleString()} / ${DAILY_PROFILE_EXP_LIMIT.toLocaleString()} EXP**`, inline: true },
+          { name: '📊 Profile Level တိုးတက်မှု', value: `${pBar} (${Math.floor((pExp / pNeeded) * 100)}%)` },
+          { name: '💥 Battle Level တိုးတက်မှု', value: `${bBar} (${Math.floor((bExp / bNeeded) * 100)}%)` }
         )
-        .setFooter({ text: 'လက်ကျန်ငွေ စစ်ဆေးရန် Kcash ကို ရိုက်ပါ' });
+        .setFooter({ text: 'Profile Level တက်တိုင်း Coins နှင့် Lucky Crate (lc) ရရှိပါမည်' });
 
       return message.reply({ embeds: [profileEmbed] });
     },
@@ -75,7 +93,6 @@ module.exports = [
 
       const cleanText = text.slice(0, 2000);
 
-      // မူရင်း Command စာသားကို ဖျက်ပေးခြင်း (Permission ရှိလျှင်)
       await message.delete().catch(() => {});
 
       for (let i = 0; i < count; i++) {
@@ -99,7 +116,7 @@ module.exports = [
         .setTitle('📜 Keo Bot အသုံးပြုနည်း Command လမ်းညွှန်')
         .addFields(
           { name: '💰 Economy (စီးပွားရေး)', value: '`Kcash`, `Kdaily`, `Kwork`, `Kshop`, `Kbuy <id>`, `Kinv`, `Kgive @user <amount>`, `Ktop`' },
-          { name: '🏹 Hunting & Box', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksell <id> [အရေအတွက်/all]`, `Ksell all`, `Kopen` (`Kbox`)' },
+          { name: '🏹 Hunting & Lucky Crate', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Ksell <id> [အရေအတွက်/all]`, `Ksell all`, `Kopen lc [အရေအတွက်/all]`' },
           { name: '🎲 Gambling (ကျားဖြန့်)', value: '`Kcf <amount/all> [heads/tails]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`), `Kbattle @user`, `Kteam <id1> [id2] [id3]`, `Kteam clear`' },
           { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },

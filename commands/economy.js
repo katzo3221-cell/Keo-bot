@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { User, getUser } = require('../models/User');
+const { User, getUser, addProfileExp } = require('../models/User');
 const {
   ITEM_RANKS,
   SHOP_ITEMS,
@@ -19,7 +19,7 @@ module.exports = [
         .setAuthor({ name: `${message.author.username} ၏ ပိုက်ဆံအိတ်`, iconURL: message.author.displayAvatarURL() })
         .setDescription(
           `💰 လက်ကျန်ငွေ: **${user.balance.toLocaleString()} coins**\n` +
-          `🎁 Mystery Boxes: **${user.boxes || 0} လုံး**`
+          `🎁 Lucky Crates (\`lc\`): **${user.boxes || 0} လုံး**`
         )
         .setTimestamp();
 
@@ -27,7 +27,7 @@ module.exports = [
     },
   },
 
-  // ၂။ နေ့စဉ် အခမဲ့ငွေ နှင့် Random Item ၂ လုံး ထုတ်ယူခြင်း (Kdaily)
+  // ၂။ နေ့စဉ် အခမဲ့ငွေ၊ Profile EXP နှင့် Random Item ၂ လုံး ထုတ်ယူခြင်း (Kdaily)
   {
     names: ['daily'],
     async execute(message, args, user) {
@@ -65,20 +65,23 @@ module.exports = [
         return `${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (\`${item.id}\`) — အသုံးပြုခွင့်: **${totalUses} ကြိမ်**`;
       });
 
-      let boxBonusText = '';
+      let crateBonusText = '';
       if (user.dailyStreak % 3 === 0) {
         user.boxes = (user.boxes || 0) + 1;
-        boxBonusText = `\n🎁 **${user.dailyStreak} ရက်ဆက် Streak ဆု:** **Mystery Box +1** အပိုရရှိပါတယ်! (\`Kopen\` ဖြင့်ဖွင့်ပါ)`;
+        crateBonusText = `\n🎁 **${user.dailyStreak} ရက်ဆက် Streak ဆု:** **Lucky Crate (\`lc\`) +1** အပိုရရှိပါတယ်! (\`Kopen lc\` ဖြင့်ဖွင့်ပါ)`;
       }
 
       user.balance += reward;
       user.lastDaily = now;
+
+      // Profile EXP +100 (Daily Limit 3,000)
+      const expRes = addProfileExp(user, 100);
       await user.save();
 
       const maxNote = reward >= MAX_DAILY ? ' *(MAX)*' : '';
       return message.reply(
-        `🎁 **Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!\n` +
-        `🎒 **Daily Item ဆုလက်ဆောင် (၂ မျိုး):**\n${droppedLines.join('\n')}${boxBonusText}`
+        `🎁 **Profile Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} နှင့် **+${expRes.addedExp} Profile EXP** ရရှိပါပြီ!\n` +
+        `🎒 **Daily Item ဆုလက်ဆောင် (၂ မျိုး):**\n${droppedLines.join('\n')}${crateBonusText}${expRes.levelUpText}`
       );
     },
   },
@@ -110,11 +113,14 @@ module.exports = [
 
       user.balance += earned;
       user.lastWork = now;
+
+      // Profile EXP +35 (Daily Limit 3,000)
+      const expRes = addProfileExp(user, 35);
       await user.save();
 
       const maxNote = earned >= MAX_WORK ? ' *(MAX)*' : '';
       return message.reply(
-        `💼 **Lv.${currentLevel}** — သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned.toLocaleString()} coins**${maxNote} ရရှိခဲ့ပါတယ်!`
+        `💼 **Profile Lv.${currentLevel}** — သင်သည် **${job}** ဖြင့် လုပ်အားခ **${earned.toLocaleString()} coins**${maxNote} နှင့် **+${expRes.addedExp} Profile EXP** ရရှိခဲ့ပါတယ်!${expRes.levelUpText}`
       );
     },
   },
@@ -219,7 +225,7 @@ module.exports = [
 
       const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
       const leaderboard = sorted
-        .map((u, index) => `${medals[index]} **${u.username}** (Lv.${u.level}) — 💰 **${u.balance.toLocaleString()} coins**`)
+        .map((u, index) => `${medals[index]} **${u.username}** (Profile Lv.${u.level}) — 💰 **${u.balance.toLocaleString()} coins**`)
         .join('\n');
 
       const topEmbed = new EmbedBuilder()
@@ -251,7 +257,7 @@ module.exports = [
 
       const shopEmbed = new EmbedBuilder()
         .setColor('#9B59B6')
-        .setTitle('🏪 Keo အရောင်းဆိုင် (Rank 1 - 3 Items)')
+        .setTitle('🏪 Keo အရောင်းဆိုင် (Rank 1 - 3 Hunt Items)')
         .setDescription(shopList)
         .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> | Rank 4 - 7 အဆင့်မြင့်ပစ္စည်းများကို Kdaily နှင့် Khunt မှသာ ရနိုင်ပါသည်' });
 
@@ -259,7 +265,7 @@ module.exports = [
     },
   },
 
-  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id> - Rank 1-3 သာ ဝယ်ခွင့်ရှိသည်)
+  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id>)
   {
     names: ['buy'],
     async execute(message, args, user) {
@@ -274,7 +280,7 @@ module.exports = [
         const rInfo = ITEM_RANKS[item.rank];
         return message.reply(
           `🚫 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** ကို ဆိုင်မှာ ဝယ်ယူ၍ မရပါ!\n` +
-          `Rank 4 မှ Rank 7 အထိ အဆင့်မြင့်ပစ္စည်းများကို **` + '`Kdaily`' + `** နှင့် **` + '`Khunt`' + `** မှသာ ရှာဖွေရရှိနိုင်ပါမယ်။`
+          `Rank 4 မှ Rank 7 အထိ အဆင့်မြင့်ပစ္စည်းများကို \`Kdaily\` နှင့် \`Khunt\` မှသာ ရှာဖွေရရှိနိုင်ပါမယ်။`
         );
       }
 
@@ -282,7 +288,6 @@ module.exports = [
         return message.reply(`✅ သင်သည် **${item.name}** ကို ပိုင်ဆိုင်ပြီးသား ဖြစ်ပါတယ်! (\`Kinv\` တွင် စစ်ဆေးပါ)`);
       }
 
-      // Luck Item တစ်ခုရှိပြီးသားဆိုရင် နောက်တစ်ခု ထပ်ဝယ်ခွင့်ပိတ်ခြင်း
       if (item.luckBonus > 0) {
         const existingLuckId = (user.items || []).find((id) => {
           const owned = findItemById(id);
@@ -320,14 +325,13 @@ module.exports = [
     names: ['inv', 'inventory', 'bag'],
     async execute(message, args, user) {
       const ownedIds = user.items || [];
-      const boxCount = user.boxes || 0;
+      const crateCount = user.boxes || 0;
       const lines = [];
 
-      if (boxCount > 0) {
-        lines.push(`🎁 **လျှို့ဝှက်သေတ္တာ (Mystery Box)** — **${boxCount} လုံး** *(\`Kopen\` ဖြင့် ဖွင့်ပါ)*`);
+      if (crateCount > 0) {
+        lines.push(`🎁 **Lucky Crate (\`lc\`)** — **${crateCount} လုံး** *(\`Kopen lc [အရေအတွက်/all]\` ဖြင့် ဖွင့်ပါ)*`);
       }
 
-      // Rank အမြင့်ဆုံးမှ အနိမ့်ဆုံးသို့ စီပြီး ပြသခြင်း
       const sortedItems = ownedIds
         .map((id) => findItemById(id))
         .filter(Boolean)
