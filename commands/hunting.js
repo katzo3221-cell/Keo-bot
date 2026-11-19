@@ -367,21 +367,59 @@ module.exports = [
       const firstArg = args[0]?.toLowerCase();
 
       if (commandName === 'sellall' || firstArg === 'all') {
-        let totalEarned = 0;
-        for (const [name, count] of entries) {
-          const info = ANIMALS.find((a) => a.name === name);
-          if (info) {
-            totalEarned += info.price * count;
+        // Battle Team ထဲတွင် ထည့်ထားသော အကောင်အရေအတွက်များကို ရေတွက်ချန်ထားခြင်း
+        const protectedCounts = {};
+        for (const id of user.battleTeam || []) {
+          const info = ANIMALS.find((a) => a.id === id);
+          if (!info) continue;
+          const owned = (user.zoo && user.zoo[info.name]) || 0;
+          const alreadyProtected = protectedCounts[info.name] || 0;
+          if (owned > alreadyProtected) {
+            protectedCounts[info.name] = alreadyProtected + 1;
           }
         }
 
-        user.zoo = {};
-        user.battleTeam = [];
+        let totalEarned = 0;
+        let soldTotal = 0;
+        let keptTotal = 0;
+        const newZoo = {};
+
+        for (const [name, count] of entries) {
+          const info = ANIMALS.find((a) => a.name === name);
+          const keepCount = Math.min(count, protectedCounts[name] || 0);
+          const sellCount = count - keepCount;
+
+          if (keepCount > 0) {
+            newZoo[name] = keepCount;
+            keptTotal += keepCount;
+          }
+
+          if (sellCount > 0 && info) {
+            totalEarned += info.price * sellCount;
+            soldTotal += sellCount;
+          }
+        }
+
+        if (soldTotal === 0) {
+          return message.reply(
+            '🛡️ ရောင်းစရာ တိရစ္ဆာန် မရှိပါဘူး! လက်ကျန်အကောင်အားလုံးက **Battle Team** ထဲမှာ တပ်ဆင်ထားတဲ့ အကောင်တွေ ဖြစ်နေပါတယ်။\n' +
+            '*(အဲဒီအကောင်တွေကိုပါ ရောင်းချင်ရင် `Kteam clear` အရင်ရိုက်ပါ)*'
+          );
+        }
+
+        user.zoo = newZoo;
+        syncBattleTeam(user);
         user.balance += totalEarned;
         user.markModified('zoo');
         await user.save();
 
-        return message.reply(`💵 ဖမ်းထားသော တိရစ္ဆာန်အားလုံးကို ရောင်းချလိုက်ရာ **+${totalEarned.toLocaleString()} coins** ရရှိပါပြီ!`);
+        const keepNote = keptTotal > 0
+          ? `\n🛡️ *(Battle Team ထဲမှ အကောင် **${keptTotal} ကောင်** ကို မရောင်းဘဲ ချန်ထားပေးထားပါသည်)*`
+          : '';
+
+        return message.reply(
+          `💵 တိရစ္ဆာန် စုစုပေါင်း **${soldTotal.toLocaleString()} ကောင်** ကို ရောင်းချလိုက်ရာ **+${totalEarned.toLocaleString()} coins** ရရှိပါပြီ!${keepNote}`
+        );
       }
 
       if (!firstArg) {
