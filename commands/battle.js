@@ -1,7 +1,7 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getUser, addExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
-const { SHOP_ITEMS, useCategoryItems } = require('../data/shopItems');
+const { findItemById, useCategoryItems } = require('../data/shopItems');
 
 function findAnimal(query) {
   const q = query.toLowerCase().trim();
@@ -17,7 +17,6 @@ function getBattleStats(userObj) {
   let team = [];
   let isCustomTeam = false;
 
-  // ကစားသမား စိတ်ကြိုက်ရွေးထားသော battleTeam ရှိပါက ဦးစားပေးအသုံးပြုခြင်း
   if (userObj.battleTeam && userObj.battleTeam.length > 0) {
     const usedCounts = {};
     for (const id of userObj.battleTeam) {
@@ -33,7 +32,6 @@ function getBattleStats(userObj) {
     if (team.length > 0) isCustomTeam = true;
   }
 
-  // စိတ်ကြိုက်အဖွဲ့ မရွေးရသေးပါက အကောင်းဆုံး ၃ ကောင်ကို အလိုအလျောက် ရွေးပေးခြင်း
   if (team.length === 0) {
     const entries = Object.entries(userObj.zoo || {});
     for (const [name, count] of entries) {
@@ -50,7 +48,7 @@ function getBattleStats(userObj) {
 
   let itemPower = 0;
   for (const itemId of userObj.items || []) {
-    const itemInfo = SHOP_ITEMS.find((i) => i.id === itemId);
+    const itemInfo = findItemById(itemId);
     if (itemInfo && itemInfo.powerBonus) {
       itemPower += itemInfo.powerBonus;
     }
@@ -67,14 +65,12 @@ function getBattleStats(userObj) {
 async function handleTeamCommand(message, args, user) {
   const sub = args[0]?.toLowerCase();
 
-  // အဖွဲ့ ရှင်းလင်းပြီး Auto ပြန်ထားခြင်း
   if (sub === 'clear' || sub === 'reset' || sub === 'auto') {
     user.battleTeam = [];
     await user.save();
     return message.reply('✅ စိတ်ကြိုက်တိုက်ပွဲအဖွဲ့ကို ဖျက်သိမ်းလိုက်ပါပြီ! နောက်ပိုင်း `Kbattle` တွင် အကောင်းဆုံး ၃ ကောင်ကို အလိုအလျောက် ရွေးပေးပါမယ်။');
   }
 
-  // အဖွဲ့အသစ် ရွေးချယ်သတ်မှတ်ခြင်း (ဥပမာ - Kteam dragon phoenix lion)
   const picks = sub === 'set' ? args.slice(1) : args;
   if (picks.length > 0) {
     if (picks.length > 3) {
@@ -109,7 +105,6 @@ async function handleTeamCommand(message, args, user) {
     );
   }
 
-  // လက်ရှိ Battle Team ကြည့်ရှုခြင်း (Kteam)
   const stats = getBattleStats(user);
   if (stats.team.length === 0) {
     return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
@@ -139,11 +134,10 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP (Kbattle / Kb)
+  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP with Accept/Reject Buttons (Kbattle / Kb)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
-      // Kb select <id1> <id2> <id3> ပုံစံဖြင့် ရိုက်လျှင်လည်း အလုပ်လုပ်စေရန်
       if (args[0] && ['select', 'team'].includes(args[0].toLowerCase())) {
         return handleTeamCommand(message, args.slice(1), user);
       }
@@ -157,7 +151,7 @@ module.exports = [
       const myTeamText = myStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
       const opponentMention = message.mentions.users.first();
 
-      // PvP Battle (သူငယ်ချင်းနှင့် တိုက်ခိုက်ခြင်း)
+      // PvP Battle (စိန်ခေါ်ခံရသူမှ Accept / Reject ခလုတ်နှိပ်၍ ရွေးချယ်ခြင်း)
       if (opponentMention) {
         if (opponentMention.bot) {
           return message.reply('❌ Bot များကို စိန်ခေါ်၍ မရပါ။');
@@ -173,59 +167,140 @@ module.exports = [
         }
 
         const oppTeamText = oppStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
-        const pvpEmbed = new EmbedBuilder()
+        const challengeEmbed = new EmbedBuilder()
           .setColor('#9B59B6')
-          .setTitle(`⚔️ PvP: ${message.author.username} (Lv.${user.level}) VS ${opponentMention.username} (Lv.${oppUser.level})`)
+          .setTitle(`⚔️ PvP စိန်ခေါ်မှု: ${message.author.username} VS ${opponentMention.username}`)
+          .setDescription(
+            `**${message.author.username}** (Lv.${user.level}) က **${opponentMention.username}** (Lv.${oppUser.level}) ကို တိရစ္ဆာန်တိုက်ပွဲ စိန်ခေါ်လိုက်ပါပြီ!\n` +
+            `<@${opponentMention.id}> အနေဖြင့် **၃၀ စက္ကန့်အတွင်း** လက်ခံမလား၊ ငြင်းပယ်မလား ရွေးချယ်ပါ —`
+          )
           .addFields(
             { name: `🛡️ ${message.author.username}`, value: myTeamText, inline: true },
             { name: `🔥 ${opponentMention.username}`, value: oppTeamText, inline: true }
-          )
-          .setFooter({ text: 'PvP တိုက်ပွဲ ပြင်းထန်စွာ တိုက်ခိုက်နေပါသည်...' });
+          );
 
-        const msg = await message.reply({ embeds: [pvpEmbed] });
-        await sleep(1500);
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('pvp_accept')
+            .setLabel('⚔️ Accept (လက်ခံမည်)')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('pvp_reject')
+            .setLabel('🏳️ Reject (ငြင်းပယ်မည်)')
+            .setStyle(ButtonStyle.Danger)
+        );
 
-        const brokenItemText = useCategoryItems(user, 'battle');
+        const challengeMsg = await message.reply({
+          content: `<@${opponentMention.id}>`,
+          embeds: [challengeEmbed],
+          components: [row],
+        });
 
-        if (myStats.totalPower >= oppStats.totalPower) {
-          const gainedExp = Math.floor(Math.random() * 31) + 45;
-          const isLevelUp = addExp(user, gainedExp);
-          addExp(oppUser, 10);
+        const collector = challengeMsg.createMessageComponentCollector({ time: 30000 });
 
-          let boxDropText = '';
-          if (Math.random() < 0.20) {
-            user.boxes = (user.boxes || 0) + 1;
-            boxDropText = `\n🎁 PvP အောင်ပွဲဆု **Mystery Box +1** ရရှိပါတယ်!`;
+        collector.on('collect', async (i) => {
+          if (i.user.id !== opponentMention.id) {
+            return i.reply({ content: '❌ ဒီစိန်ခေါ်မှုက သင့်ကို ခေါ်ထားတာ မဟုတ်ပါဘူး!', ephemeral: true });
           }
 
-          await user.save();
-          await oppUser.save();
-
-          let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${myStats.totalPower}\` vs \`${oppStats.totalPower}\`)\n✨ **+${gainedExp} EXP** ရရှိပါတယ်!${boxDropText}`;
-          if (isLevelUp) {
-            resultText += `\n🎊 **LEVEL UP!** **${message.author.username}** သည် **Level ${user.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+          if (i.customId === 'pvp_reject') {
+            collector.stop('rejected');
+            const rejectEmbed = new EmbedBuilder()
+              .setColor('#E74C3C')
+              .setTitle('🏳️ စိန်ခေါ်မှုကို ငြင်းပယ်လိုက်ပါပြီ')
+              .setDescription(`**${opponentMention.username}** က **${message.author.username}** ၏ PvP တိုက်ပွဲစိန်ခေါ်မှုကို ငြင်းပယ်လိုက်ပါပြီ။`);
+            return i.update({ content: '', embeds: [rejectEmbed], components: [] });
           }
-          resultText += brokenItemText;
 
-          pvpEmbed.setColor('#2ECC71').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
-        } else {
-          const gainedExp = Math.floor(Math.random() * 31) + 45;
-          const oppLevelUp = addExp(oppUser, gainedExp);
-          addExp(user, 10);
+          if (i.customId === 'pvp_accept') {
+            collector.stop('accepted');
 
-          await user.save();
-          await oppUser.save();
+            const freshUser = await getUser(message.author.id, message.author.username);
+            const freshOppUser = await getUser(opponentMention.id, opponentMention.username);
+            const freshMyStats = getBattleStats(freshUser);
+            const freshOppStats = getBattleStats(freshOppUser);
 
-          let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${oppStats.totalPower}\` vs \`${myStats.totalPower}\`)\n✨ **${opponentMention.username}** က **+${gainedExp} EXP** ရရှိပြီး သင်သည် **+10 EXP** ရရှိပါတယ်။`;
-          if (oppLevelUp) {
-            resultText += `\n🎊 **LEVEL UP!** **${opponentMention.username}** သည် **Level ${oppUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+            if (freshMyStats.team.length === 0 || freshOppStats.team.length === 0) {
+              const errEmbed = new EmbedBuilder()
+                .setColor('#E74C3C')
+                .setDescription('❌ ကစားသမားတစ်ဦးတွင် တိုက်ပွဲဝင်ရန် တိရစ္ဆာန် မရှိတော့သဖြင့် တိုက်ပွဲပျက်ပြယ်သွားပါပြီ။');
+              return i.update({ content: '', embeds: [errEmbed], components: [] });
+            }
+
+            const fightingEmbed = new EmbedBuilder()
+              .setColor('#F39C12')
+              .setTitle(`⚔️ PvP: ${message.author.username} (Lv.${freshUser.level}) VS ${opponentMention.username} (Lv.${freshOppUser.level})`)
+              .addFields(
+                { name: `🛡️ ${message.author.username}`, value: freshMyStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n'), inline: true },
+                { name: `🔥 ${opponentMention.username}`, value: freshOppStats.team.map((a) => `${a.emoji} ${a.name}`).join('\n'), inline: true }
+              )
+              .setFooter({ text: 'PvP တိုက်ပွဲ ပြင်းထန်စွာ တိုက်ခိုက်နေပါသည်...' });
+
+            await i.update({ content: '', embeds: [fightingEmbed], components: [] });
+            await sleep(1500);
+
+            const myBrokenText = useCategoryItems(freshUser, 'battle');
+            const oppBrokenText = useCategoryItems(freshOppUser, 'battle');
+            const allBrokenText = `${myBrokenText}${oppBrokenText}`;
+
+            if (freshMyStats.totalPower >= freshOppStats.totalPower) {
+              const gainedExp = Math.floor(Math.random() * 31) + 45;
+              const isLevelUp = addExp(freshUser, gainedExp);
+              addExp(freshOppUser, 10);
+
+              let boxDropText = '';
+              if (Math.random() < 0.20) {
+                freshUser.boxes = (freshUser.boxes || 0) + 1;
+                boxDropText = `\n🎁 PvP အောင်ပွဲဆု **Mystery Box +1** ရရှိပါတယ်!`;
+              }
+
+              await freshUser.save();
+              await freshOppUser.save();
+
+              let resultText = `🏆 **${message.author.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshMyStats.totalPower}\` vs \`${freshOppStats.totalPower}\`)\n✨ **+${gainedExp} EXP** ရရှိပါတယ်!${boxDropText}`;
+              if (isLevelUp) {
+                resultText += `\n🎊 **LEVEL UP!** **${message.author.username}** သည် **Level ${freshUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+              }
+              resultText += allBrokenText;
+
+              fightingEmbed.setColor('#2ECC71').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
+            } else {
+              const gainedExp = Math.floor(Math.random() * 31) + 45;
+              const oppLevelUp = addExp(freshOppUser, gainedExp);
+              addExp(freshUser, 10);
+
+              let boxDropText = '';
+              if (Math.random() < 0.20) {
+                freshOppUser.boxes = (freshOppUser.boxes || 0) + 1;
+                boxDropText = `\n🎁 **${opponentMention.username}** သည် PvP အောင်ပွဲဆု **Mystery Box +1** ရရှိပါတယ်!`;
+              }
+
+              await freshUser.save();
+              await freshOppUser.save();
+
+              let resultText = `🏆 **${opponentMention.username}** က အနိုင်ရရှိပါတယ်! (Power: \`${freshOppStats.totalPower}\` vs \`${freshMyStats.totalPower}\`)\n✨ **${opponentMention.username}** က **+${gainedExp} EXP** ရရှိပြီး **${message.author.username}** သည် **+10 EXP** ရရှိပါတယ်။${boxDropText}`;
+              if (oppLevelUp) {
+                resultText += `\n🎊 **LEVEL UP!** **${opponentMention.username}** သည် **Level ${freshOppUser.level}** သို့ ရောက်ရှိသွားပါပြီ!`;
+              }
+              resultText += allBrokenText;
+
+              fightingEmbed.setColor('#E74C3C').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
+            }
+
+            return challengeMsg.edit({ embeds: [fightingEmbed] });
           }
-          resultText += brokenItemText;
+        });
 
-          pvpEmbed.setColor('#E74C3C').setDescription(resultText).setFooter({ text: 'PvP တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
-        }
+        collector.on('end', async (_, reason) => {
+          if (reason === 'time') {
+            const timeoutEmbed = new EmbedBuilder()
+              .setColor('#95A5A6')
+              .setDescription(`⏳ **${opponentMention.username}** မှ ၃၀ စက္ကန့်အတွင်း ပြန်လည်ဖြေကြားခြင်း မရှိသဖြင့် PvP စိန်ခေါ်မှု ပျက်ပြယ်သွားပါပြီ။`);
+            await challengeMsg.edit({ content: '', embeds: [timeoutEmbed], components: [] }).catch(() => {});
+          }
+        });
 
-        return msg.edit({ embeds: [pvpEmbed] });
+        return;
       }
 
       // Solo Wild Battle (တောရိုင်းအဖွဲ့နှင့် တိုက်ခိုက်ခြင်း)

@@ -1,7 +1,13 @@
 const { EmbedBuilder } = require('discord.js');
 const { addExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
-const { SHOP_ITEMS, useCategoryItems } = require('../data/shopItems');
+const {
+  ITEM_RANKS,
+  rollRandomItem,
+  grantItemToUser,
+  getActiveHuntItem,
+  consumeSingleItem,
+} = require('../data/shopItems');
 
 // Rank ၁၀ ဆင့်နှင့် Emoji အတိုလေးများ
 const RANKS = [
@@ -16,6 +22,11 @@ const RANKS = [
   { name: 'Divine', emoji: '✨' },
   { name: 'Celestial', emoji: '🌌' },
 ];
+
+// မြန်မာစံတော်ချိန် (UTC+6:30) ယနေ့ရက်စွဲ
+function getTodayMyanmarDate() {
+  return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 // တိရစ္ဆာန်၏ Rank၊ Rank Emoji အတို နှင့် နာမည်အတို ခွဲထုတ်ပေးမည့် Function
 function getAnimalMeta(animal) {
@@ -57,7 +68,7 @@ function syncBattleTeam(user) {
 }
 
 module.exports = [
-  // ၁။ အမဲလိုက်ခြင်း (Khunt / Kh - Rank Emoji အတိုလေးများဖြင့် ပြသသည်)
+  // ၁။ အမဲလိုက်ခြင်း (Khunt / Kh - တစ်ရက်လျှင် Item ၃ ခု Limit + မျှတသော Luck တွက်ချက်မှု)
   {
     names: ['hunt', 'h'],
     async execute(message, args, user) {
@@ -68,31 +79,27 @@ module.exports = [
 
       user.balance -= cost;
 
-      // Luck Item တစ်မျိုးတည်း၏ Luck Bonus ကိုသာ အများဆုံးယူခြင်း
-      let totalLuck = 0;
-      for (const itemId of user.items || []) {
-        const itemInfo = SHOP_ITEMS.find((i) => i.id === itemId);
-        if (itemInfo && itemInfo.luckBonus > 0) {
-          totalLuck = Math.max(totalLuck, itemInfo.luckBonus);
-        }
-      }
-
-      let catchCount = 1;
-      if ((user.items || []).includes('net')) catchCount += 1;
-      if ((user.items || []).includes('cage')) catchCount *= 2;
+      // အမြင့်ဆုံး Hunt Item တစ်မျိုးတည်း၏ Luck နှင့် Catch အရေအတွက်ကိုသာ ယူခြင်း
+      const activeHuntItem = getActiveHuntItem(user);
+      const totalLuck = activeHuntItem ? activeHuntItem.luckBonus : 0;
+      const extraCatch = activeHuntItem ? activeHuntItem.extraCatch : 0;
+      const catchMultiplier = activeHuntItem ? activeHuntItem.catchMultiplier : 1;
+      const catchCount = (1 + extraCatch) * catchMultiplier;
 
       if (!user.zoo) user.zoo = {};
       const caughtSummary = {};
 
-      // အကောင်တစ်ခုချင်းစီ၏ ကျနိုင်ခြေ (Weight) ကို Luck နှင့် ချိန်ညှိတွက်ချက်ခြင်း
+      // Item သုံးထားရင်တောင် Mythical / Divine / Celestial အမြဲမမိအောင် ချိန်ညှိထားသော Weight စနစ်
       const weightedAnimals = ANIMALS.map((animal) => {
         let multiplier = 1;
-        if (animal.price >= 8000) {
-          multiplier = 1 + totalLuck * 0.06; // Legendary, Mythical, Divine, Celestial
+        if (animal.price >= 18000) {
+          multiplier = 1 + totalLuck * 0.04; // Mythical, Divine, Celestial
+        } else if (animal.price >= 8000) {
+          multiplier = 1 + totalLuck * 0.045; // Legendary
         } else if (animal.price >= 1000) {
-          multiplier = 1 + totalLuck * 0.04; // Epic, Ultra Epic
+          multiplier = 1 + totalLuck * 0.035; // Epic, Ultra Epic
         } else if (animal.price >= 60) {
-          multiplier = 1 + totalLuck * 0.025; // Rare, Super Rare
+          multiplier = 1 + totalLuck * 0.02; // Rare, Super Rare
         }
         return { animal, weight: animal.chance * multiplier };
       });
@@ -132,17 +139,30 @@ module.exports = [
         .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}** (\`${data.id}\`)${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
         .join('၊ ');
 
-      let foundBoxText = '';
-      if (Math.random() < 0.10) {
-        user.boxes = (user.boxes || 0) + 1;
-        foundBoxText = `\n🎁 တောထဲမှ **Mystery Box +1** ကောက်ရရှိပါတယ်! (\`Kopen\` ဖြင့် ဖွင့်ပါ)`;
+      // တောထဲမှ Item ရှာတွေ့ခြင်း (တစ်ရက်လျှင် အများဆုံး ၃ ခု Limit)
+      const todayStr = getTodayMyanmarDate();
+      if (user.dailyHuntItemDate !== todayStr) {
+        user.dailyHuntItemDate = todayStr;
+        user.dailyHuntItemCount = 0;
       }
 
-      const brokenItemText = useCategoryItems(user, 'hunt');
+      let foundItemText = '';
+      if (user.dailyHuntItemCount < 3 && Math.random() < 0.15) {
+        const foundItem = rollRandomItem();
+        const totalUses = grantItemToUser(user, foundItem);
+        user.dailyHuntItemCount += 1;
+        const rInfo = ITEM_RANKS[foundItem.rank];
+        foundItemText =
+          `\n🎒 တောထဲမှ ${rInfo.emoji} **[Rank ${foundItem.rank}] ${foundItem.name}** (\`${foundItem.id}\`) ရှာတွေ့ပါတယ်! ` +
+          `*(အသုံးပြုခွင့်: **${totalUses} ကြိမ်** | ယနေ့ Item Limit: **${user.dailyHuntItemCount}/3**)*`;
+      }
+
+      // အသုံးပြုခဲ့သော Hunt Item ၁ ခုတည်း၏ အကြိမ်ရေကိုသာ ၁ ကြိမ် လျှော့ချခြင်း
+      const brokenItemText = activeHuntItem ? consumeSingleItem(user, activeHuntItem.id) : '';
       await user.save();
 
       return message.reply(
-        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်!${foundBoxText}${brokenItemText}`
+        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်!${foundItemText}${brokenItemText}`
       );
     },
   },
@@ -325,7 +345,7 @@ module.exports = [
     names: ['open', 'box'],
     async execute(message, args, user) {
       if ((user.boxes || 0) <= 0) {
-        return message.reply('📦 ဖွင့်စရာ **Mystery Box** မရှိသေးပါဘူး! `Kbuy box` ဖြင့် ဝယ်ယူနိုင်သလို `Khunt` နှင့် `Kbattle` ကနေလည်း ကံစမ်းရရှိနိုင်ပါတယ်။');
+        return message.reply('📦 ဖွင့်စရာ **Mystery Box** မရှိသေးပါဘူး! ၃ ရက်ဆက် `Kdaily` Streak နှင့် `Kbattle` အောင်ပွဲများမှ ရရှိနိုင်ပါတယ်။');
       }
 
       user.boxes -= 1;

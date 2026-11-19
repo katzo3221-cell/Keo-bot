@@ -1,6 +1,12 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { User, getUser } = require('../models/User');
-const { SHOP_ITEMS } = require('../data/shopItems');
+const {
+  ITEM_RANKS,
+  SHOP_ITEMS,
+  findItemById,
+  rollRandomItem,
+  grantItemToUser,
+} = require('../data/shopItems');
 
 module.exports = [
   // ၁။ လက်ကျန်ငွေ စစ်ဆေးခြင်း (Kcash / Kbal)
@@ -21,7 +27,7 @@ module.exports = [
     },
   },
 
-  // ၂။ နေ့စဉ် အခမဲ့ငွေ ထုတ်ယူခြင်း (Kdaily)
+  // ၂။ နေ့စဉ် အခမဲ့ငွေ နှင့် Random Item ၂ လုံး ထုတ်ယူခြင်း (Kdaily)
   {
     names: ['daily'],
     async execute(message, args, user) {
@@ -51,6 +57,14 @@ module.exports = [
       const streakBonus = (user.dailyStreak - 1) * 100;
       const reward = Math.min(baseReward + levelBonus + expBonus + streakBonus, MAX_DAILY);
 
+      // Daily ဆုအဖြစ် Rank 1-7 Random Item ၂ ခု ထုတ်ပေးခြင်း
+      const droppedItems = [rollRandomItem(), rollRandomItem()];
+      const droppedLines = droppedItems.map((item) => {
+        const totalUses = grantItemToUser(user, item);
+        const rInfo = ITEM_RANKS[item.rank];
+        return `${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (\`${item.id}\`) — အသုံးပြုခွင့်: **${totalUses} ကြိမ်**`;
+      });
+
       let boxBonusText = '';
       if (user.dailyStreak % 3 === 0) {
         user.boxes = (user.boxes || 0) + 1;
@@ -63,7 +77,8 @@ module.exports = [
 
       const maxNote = reward >= MAX_DAILY ? ' *(MAX)*' : '';
       return message.reply(
-        `🎁 **Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!${boxBonusText}`
+        `🎁 **Lv.${currentLevel}** | 🔥 Streak: **${user.dailyStreak} ရက်** — နေ့စဉ်ဆုကြေး **${reward.toLocaleString()} coins**${maxNote} ရရှိပါပြီ!\n` +
+        `🎒 **Daily Item ဆုလက်ဆောင် (၂ မျိုး):**\n${droppedLines.join('\n')}${boxBonusText}`
       );
     },
   },
@@ -104,12 +119,12 @@ module.exports = [
     },
   },
 
-  // ၄။ သူငယ်ချင်းဆီ ပိုက်ဆံလွှဲပေးခြင်း (Kgive @user 100)
+  // ၄။ သူငယ်ချင်းဆီ ပိုက်ဆံလွှဲပေးခြင်း (Kgive @user 100 - Confirm / Reject ခလုတ်စနစ်)
   {
     names: ['give'],
     async execute(message, args, user) {
       const target = message.mentions.users.first();
-      const amount = parseInt(args[1]);
+      const amount = parseInt(args[1], 10);
 
       if (!target || target.bot) {
         return message.reply('❌ ပိုက်ဆံလွှဲပေးမယ့် သူကို Mention ခေါ်ပါ။ (ဥပမာ - `Kgive @User 100`)');
@@ -124,13 +139,74 @@ module.exports = [
         return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
-      const targetUser = await getUser(target.id, target.username);
-      user.balance -= amount;
-      targetUser.balance += amount;
-      await user.save();
-      await targetUser.save();
+      const confirmEmbed = new EmbedBuilder()
+        .setColor('#F1C40F')
+        .setTitle('💸 ငွေလွှဲပြောင်းမှု အတည်ပြုချက် (Confirm Transfer)')
+        .setDescription(
+          `**${message.author.username}** သည် **${target.username}** ထံသို့ **${amount.toLocaleString()} coins** လွှဲပေးမှာ သေချာပါသလား?\n` +
+          `*(၃၀ စက္ကန့်အတွင်း အောက်ပါခလုတ်ကို နှိပ်၍ ရွေးချယ်ပါ)*`
+        );
 
-      return message.reply(`💸 **${message.author.username}** က **${target.username}** ထံသို့ **${amount.toLocaleString()} coins** လွှဲပေးလိုက်ပါပြီ!`);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('give_confirm')
+          .setLabel('✅ Confirm (အတည်ပြုမည်)')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('give_reject')
+          .setLabel('❌ Reject (ပယ်ဖျက်မည်)')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      const promptMsg = await message.reply({ embeds: [confirmEmbed], components: [row] });
+      const collector = promptMsg.createMessageComponentCollector({ time: 30000 });
+
+      collector.on('collect', async (i) => {
+        if (i.user.id !== message.author.id) {
+          return i.reply({ content: '❌ ဒါက သင့်ရဲ့ ငွေလွှဲမှု မဟုတ်ပါဘူး!', ephemeral: true });
+        }
+
+        if (i.customId === 'give_reject') {
+          collector.stop('rejected');
+          const rejectEmbed = new EmbedBuilder()
+            .setColor('#E74C3C')
+            .setDescription(`❌ **${message.author.username}** က **${target.username}** ထံ ငွေလွှဲခြင်းကို ပယ်ဖျက်လိုက်ပါပြီ။`);
+          return i.update({ embeds: [rejectEmbed], components: [] });
+        }
+
+        if (i.customId === 'give_confirm') {
+          const freshSender = await getUser(message.author.id, message.author.username);
+          const freshReceiver = await getUser(target.id, target.username);
+
+          if (amount > freshSender.balance) {
+            collector.stop('insufficient');
+            const errEmbed = new EmbedBuilder()
+              .setColor('#E74C3C')
+              .setDescription('❌ လက်ကျန်ငွေ မလုံလောက်တော့ပါ!');
+            return i.update({ embeds: [errEmbed], components: [] });
+          }
+
+          freshSender.balance -= amount;
+          freshReceiver.balance += amount;
+          await freshSender.save();
+          await freshReceiver.save();
+
+          collector.stop('confirmed');
+          const successEmbed = new EmbedBuilder()
+            .setColor('#2ECC71')
+            .setDescription(`💸 **${message.author.username}** က **${target.username}** ထံသို့ **${amount.toLocaleString()} coins** လွှဲပေးလိုက်ပါပြီ!`);
+          return i.update({ embeds: [successEmbed], components: [] });
+        }
+      });
+
+      collector.on('end', async (_, reason) => {
+        if (reason === 'time') {
+          const timeoutEmbed = new EmbedBuilder()
+            .setColor('#95A5A6')
+            .setDescription('⏳ အချိန်စေ့သွားသဖြင့် ငွေလွှဲမှု အလိုအလျောက် ပျက်ပြယ်သွားပါပြီ။');
+          await promptMsg.edit({ embeds: [timeoutEmbed], components: [] }).catch(() => {});
+        }
+      });
     },
   },
 
@@ -157,32 +233,33 @@ module.exports = [
     },
   },
 
-  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop)
+  // ၆။ ဆိုင်ခန်း ကြည့်ခြင်း (Kshop - Rank အနိမ့် ၃ မျိုးသာ ရောင်းချသည်)
   {
     names: ['shop'],
     async execute(message, args, user) {
-      const shopList = SHOP_ITEMS.map((item) => {
+      const shopOnlyItems = SHOP_ITEMS.filter((item) => item.shopAvailable);
+
+      const shopList = shopOnlyItems.map((item) => {
+        const rInfo = ITEM_RANKS[item.rank];
         let status = `💰 **${item.price.toLocaleString()} coins**`;
-        if (item.isConsumable) {
-          status += ` *(လက်ရှိ: ${user.boxes || 0} လုံး)*`;
-        } else if ((user.items || []).includes(item.id)) {
+        if ((user.items || []).includes(item.id)) {
           const left = (user.itemUses && user.itemUses[item.id] !== undefined) ? user.itemUses[item.id] : item.maxUses;
-          status = `✅ *(ဝယ်ပြီး — ကျန်: **${left}/${item.maxUses}** ကြိမ်)*`;
+          status += ` *(လက်ရှိ: **${left}** ကြိမ်)*`;
         }
-        return `🛒 **${item.name}** (ID: \`${item.id}\`)\n└ ${item.desc} — ${status}`;
+        return `${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** (ID: \`${item.id}\`)\n└ ${item.desc} — ${status}`;
       }).join('\n\n');
 
       const shopEmbed = new EmbedBuilder()
         .setColor('#9B59B6')
-        .setTitle('🏪 Keo အရောင်းဆိုင် (Item & Weapon Shop)')
+        .setTitle('🏪 Keo အရောင်းဆိုင် (Rank 1 - 3 Items)')
         .setDescription(shopList)
-        .setFooter({ text: 'ဝယ်ယူရန် Kbuy <ID> ကို ရိုက်ပါ (ဥပမာ - Kbuy sword)' });
+        .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> | Rank 4 - 7 အဆင့်မြင့်ပစ္စည်းများကို Kdaily နှင့် Khunt မှသာ ရနိုင်ပါသည်' });
 
       return message.reply({ embeds: [shopEmbed] });
     },
   },
 
-  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id>)
+  // ၇။ ပစ္စည်း ဝယ်ယူခြင်း (Kbuy <id> - Rank 1-3 သာ ဝယ်ခွင့်ရှိသည်)
   {
     names: ['buy'],
     async execute(message, args, user) {
@@ -192,24 +269,33 @@ module.exports = [
       if (!item) {
         return message.reply('❌ ပစ္စည်း ID မှားယွင်းနေပါတယ်။ ဆိုင်ထဲက ပစ္စည်းများကို ကြည့်ရန် `Kshop` ကို ရိုက်ပါ။');
       }
-      if (!item.isConsumable && (user.items || []).includes(item.id)) {
-        return message.reply(`✅ သင်သည် **${item.name}** ကို ဝယ်ယူပြီးသား ဖြစ်ပါတယ်!`);
+
+      if (!item.shopAvailable) {
+        const rInfo = ITEM_RANKS[item.rank];
+        return message.reply(
+          `🚫 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** ကို ဆိုင်မှာ ဝယ်ယူ၍ မရပါ!\n` +
+          `Rank 4 မှ Rank 7 အထိ အဆင့်မြင့်ပစ္စည်းများကို **` + '`Kdaily`' + `** နှင့် **` + '`Khunt`' + `** မှသာ ရှာဖွေရရှိနိုင်ပါမယ်။`
+        );
       }
 
-      // Luck Item (bow, rifle, charm) တစ်ခုရှိပြီးသားဆိုရင် နောက်တစ်ခု ထပ်ဝယ်ခွင့်ပိတ်ခြင်း
+      if ((user.items || []).includes(item.id)) {
+        return message.reply(`✅ သင်သည် **${item.name}** ကို ပိုင်ဆိုင်ပြီးသား ဖြစ်ပါတယ်! (\`Kinv\` တွင် စစ်ဆေးပါ)`);
+      }
+
+      // Luck Item တစ်ခုရှိပြီးသားဆိုရင် နောက်တစ်ခု ထပ်ဝယ်ခွင့်ပိတ်ခြင်း
       if (item.luckBonus > 0) {
         const existingLuckId = (user.items || []).find((id) => {
-          const owned = SHOP_ITEMS.find((i) => i.id === id);
+          const owned = findItemById(id);
           return owned && owned.luckBonus > 0;
         });
         if (existingLuckId) {
-          const existingItem = SHOP_ITEMS.find((i) => i.id === existingLuckId);
+          const existingItem = findItemById(existingLuckId);
           const usesLeft = (user.itemUses && user.itemUses[existingLuckId] !== undefined)
             ? user.itemUses[existingLuckId]
             : existingItem.maxUses;
           return message.reply(
-            `❌ **Luck Item တစ်မျိုးတည်းသာ တစ်ပြိုင်နက် သုံးခွင့်ရှိပါတယ်!**\n` +
-            `လက်ရှိတွင် သင်၌ **${existingItem.name}** *(ကျန်: **${usesLeft}/${existingItem.maxUses}** ကြိမ်)* ရှိနေပါသေးတယ်။ အဲဒါ ကုန်သွားမှ နောက်တစ်ခု ထပ်ဝယ်နိုင်ပါမယ်။`
+            `❌ **Luck Item တစ်မျိုးတည်းသာ ဆိုင်မှ ဝယ်သုံးခွင့်ရှိပါတယ်!**\n` +
+            `လက်ရှိတွင် သင်၌ **${existingItem.name}** *(ကျန်: **${usesLeft}** ကြိမ်)* ရှိနေပါသေးတယ်။ အဲဒါ ကုန်သွားမှ နောက်တစ်ခု ထပ်ဝယ်နိုင်ပါမယ်။`
           );
         }
       }
@@ -219,18 +305,13 @@ module.exports = [
       }
 
       user.balance -= item.price;
-      if (item.isConsumable) {
-        user.boxes = (user.boxes || 0) + 1;
-        await user.save();
-        return message.reply(`🎉 **${item.name}** ၁ လုံး ဝယ်ယူပြီးပါပြီ! (စုစုပေါင်း: **${user.boxes} လုံး** — ဖွင့်ရန် \`Kopen\` ရိုက်ပါ)`);
-      } else {
-        user.items.push(item.id);
-        if (!user.itemUses) user.itemUses = {};
-        user.itemUses[item.id] = item.maxUses;
-        user.markModified('itemUses');
-        await user.save();
-        return message.reply(`🎉 **${item.name}** ကို **${item.price.toLocaleString()} coins** ဖြင့် ဝယ်ယူပြီးပါပြီ! (အသုံးပြုခွင့်: **${item.maxUses} ကြိမ်**)`);
-      }
+      const totalUses = grantItemToUser(user, item);
+      await user.save();
+
+      const rInfo = ITEM_RANKS[item.rank];
+      return message.reply(
+        `🎉 ${rInfo.emoji} **[Rank ${item.rank}] ${item.name}** ကို **${item.price.toLocaleString()} coins** ဖြင့် ဝယ်ယူပြီးပါပြီ! (အသုံးပြုခွင့်: **${totalUses} ကြိမ်**)`
+      );
     },
   },
 
@@ -246,25 +327,32 @@ module.exports = [
         lines.push(`🎁 **လျှို့ဝှက်သေတ္တာ (Mystery Box)** — **${boxCount} လုံး** *(\`Kopen\` ဖြင့် ဖွင့်ပါ)*`);
       }
 
-      for (const id of ownedIds) {
-        const itemInfo = SHOP_ITEMS.find((i) => i.id === id);
-        if (itemInfo) {
-          const left = (user.itemUses && user.itemUses[id] !== undefined)
-            ? user.itemUses[id]
-            : itemInfo.maxUses;
-          lines.push(`🛠️ **${itemInfo.name}** (\`${itemInfo.id}\`) — ကျန်ရှိအကြိမ်: **${left}/${itemInfo.maxUses} ကြိမ်**`);
-        }
+      // Rank အမြင့်ဆုံးမှ အနိမ့်ဆုံးသို့ စီပြီး ပြသခြင်း
+      const sortedItems = ownedIds
+        .map((id) => findItemById(id))
+        .filter(Boolean)
+        .sort((a, b) => b.rank - a.rank);
+
+      for (const itemInfo of sortedItems) {
+        const rInfo = ITEM_RANKS[itemInfo.rank] || ITEM_RANKS[1];
+        const left = (user.itemUses && user.itemUses[itemInfo.id] !== undefined)
+          ? user.itemUses[itemInfo.id]
+          : itemInfo.maxUses;
+        lines.push(
+          `${rInfo.emoji} **[Rank ${itemInfo.rank}] ${itemInfo.name}** (\`${itemInfo.id}\`)\n` +
+          `└ ${itemInfo.desc} — ကျန်ရှိအကြိမ်: **${left} ကြိမ်**`
+        );
       }
 
       if (lines.length === 0) {
-        return message.reply('🎒 သင့်ကျောပိုးအိတ် (Inventory) ထဲမှာ ဘာပစ္စည်းမှ မရှိသေးပါဘူး! `Kshop` မှာ ဝင်ရောက်ဝယ်ယူနိုင်ပါတယ်။');
+        return message.reply('🎒 သင့်ကျောပိုးအိတ် (Inventory) ထဲမှာ ဘာပစ္စည်းမှ မရှိသေးပါဘူး! `Kshop`၊ `Kdaily` သို့မဟုတ် `Khunt` မှ ရယူနိုင်ပါတယ်။');
       }
 
       const invEmbed = new EmbedBuilder()
         .setColor('#1ABC9C')
         .setAuthor({ name: `${message.author.username} ၏ ကျောပိုးအိတ် (Inventory)`, iconURL: message.author.displayAvatarURL() })
         .setDescription(lines.join('\n\n'))
-        .setFooter({ text: 'ပစ္စည်းအသစ် ထပ်ဝယ်ရန် Kshop ကို ရိုက်ပါ' })
+        .setFooter({ text: 'Rank 4 - 7 အဆင့်မြင့်ပစ္စည်းများကို Kdaily နှင့် Khunt မှ ရှာဖွေရယူပါ' })
         .setTimestamp();
 
       return message.reply({ embeds: [invEmbed] });

@@ -12,6 +12,8 @@ const userSchema = new mongoose.Schema({
   battleTeam: { type: [String], default: [] },
   items: { type: [String], default: [] },
   itemUses: { type: Object, default: {} },
+  dailyHuntItemCount: { type: Number, default: 0 },
+  dailyHuntItemDate: { type: String, default: '' },
   actions: { type: Object, default: {} },
   boxes: { type: Number, default: 0 },
   exp: { type: Number, default: 0 },
