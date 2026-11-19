@@ -613,11 +613,11 @@ module.exports = [
         return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်ပါ!');
       }
 
-      let bombsCount = 3;
+      let bombsCount = 4; // မူလ 3 မှ 4 သို့ ပြောင်းပါ
       if (args[1] !== undefined) {
         const parsedBombs = parseInt(args[1], 10);
-        if (isNaN(parsedBombs) || parsedBombs < 1 || parsedBombs > 10) {
-          return message.reply('❌ ဗုံးအရေအတွက်ကို **၁ လုံးမှ ၁၀ လုံး** အတွင်းသာ ထည့်ပေးပါ! (ဥပမာ - `Kmines 1000 3`)');
+        if (isNaN(parsedBombs) || parsedBombs < 1 || parsedBombs > 11) {
+          return message.reply('❌ ဗုံးအရေအတွက်ကို **၁ လုံးမှ ၁၁ လုံး** အတွင်းသာ ထည့်ပေးပါ! (ဥပမာ - `Kmines 1000 4`)');
         }
         bombsCount = parsedBombs;
       }
