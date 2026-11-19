@@ -3,6 +3,30 @@ const { addExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
 const { SHOP_ITEMS, useCategoryItems } = require('../data/shopItems');
 
+// Rank ၁၀ ဆင့်နှင့် Emoji အတိုလေးများ
+const RANKS = [
+  { name: 'Common', emoji: '🟢' },
+  { name: 'Uncommon', emoji: '🔵' },
+  { name: 'Rare', emoji: '🟣' },
+  { name: 'Super Rare', emoji: '🩵' },
+  { name: 'Epic', emoji: '🟠' },
+  { name: 'Ultra Epic', emoji: '🟡' },
+  { name: 'Legendary', emoji: '🔴' },
+  { name: 'Mythical', emoji: '🔮' },
+  { name: 'Divine', emoji: '✨' },
+  { name: 'Celestial', emoji: '🌌' },
+];
+
+// တိရစ္ဆာန်၏ Rank၊ Rank Emoji အတို နှင့် နာမည်အတို ခွဲထုတ်ပေးမည့် Function
+function getAnimalMeta(animal) {
+  const match = animal.name.match(/\(([^)]+)\)$/);
+  const rank = match ? match[1] : 'Common';
+  const rankObj = RANKS.find((r) => r.name === rank);
+  const rankEmoji = rankObj ? rankObj.emoji : '🟢';
+  const shortName = animal.name.replace(/\s*\([^)]+\)$/, '');
+  return { rank, rankEmoji, shortName };
+}
+
 // English ID သို့မဟုတ် မြန်မာနာမည်ဖြင့် တိရစ္ဆာန် ရှာဖွေပေးမည့် Function
 function findAnimal(query) {
   const q = query.toLowerCase().trim();
@@ -33,7 +57,7 @@ function syncBattleTeam(user) {
 }
 
 module.exports = [
-  // ၁။ အမဲလိုက်ခြင်း (Khunt / Kh)
+  // ၁။ အမဲလိုက်ခြင်း (Khunt / Kh - Rank Emoji အတိုလေးများဖြင့် ပြသသည်)
   {
     names: ['hunt', 'h'],
     async execute(message, args, user) {
@@ -90,15 +114,22 @@ module.exports = [
 
         user.zoo[caught.name] = (user.zoo[caught.name] || 0) + 1;
         if (!caughtSummary[caught.name]) {
-          caughtSummary[caught.name] = { emoji: caught.emoji, id: caught.id, count: 0 };
+          const meta = getAnimalMeta(caught);
+          caughtSummary[caught.name] = {
+            emoji: caught.emoji,
+            id: caught.id,
+            shortName: meta.shortName,
+            rankEmoji: meta.rankEmoji,
+            count: 0,
+          };
         }
         caughtSummary[caught.name].count += 1;
       }
 
       user.markModified('zoo');
 
-      const caughtListText = Object.entries(caughtSummary)
-        .map(([name, data]) => `${data.emoji} **${name}** (\`${data.id}\`)${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
+      const caughtListText = Object.values(caughtSummary)
+        .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}** (\`${data.id}\`)${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
         .join('၊ ');
 
       let foundBoxText = '';
@@ -116,33 +147,45 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz - English ID များပါ တွဲပြသည်)
+  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz - Rank ဘေးတွင် Emoji လေးများသာ ပြသသည်)
   {
     names: ['zoo', 'z'],
     async execute(message, args, user) {
-      const entries = Object.entries(user.zoo || {}).filter(([, count]) => count > 0);
-      if (entries.length === 0) {
-        return message.reply('🏞️ သင့်တိရစ္ဆာန်ရုံထဲမှာ ဘာမှ မရှိသေးပါဘူး။ `Khunt` ရိုက်ပြီး ဖမ်းကြည့်ပါ!');
+      const zooData = user.zoo || {};
+      let totalValue = 0;
+      let totalAnimals = 0;
+      const rankLines = [];
+
+      for (const rankInfo of RANKS) {
+        const rankTag = `(${rankInfo.name})`;
+        const ownedInRank = ANIMALS.filter((a) => a.name.endsWith(rankTag) && (zooData[a.name] || 0) > 0);
+
+        if (ownedInRank.length > 0) {
+          const emojiList = ownedInRank
+            .map((a) => {
+              const count = zooData[a.name];
+              totalValue += a.price * count;
+              totalAnimals += count;
+              return `${a.emoji}\`×${count}\``;
+            })
+            .join(' ');
+
+          rankLines.push(`${rankInfo.emoji} **${rankInfo.name}** ➔ ${emojiList}`);
+        }
       }
 
-      let totalValue = 0;
-      const lines = entries.map(([name, count]) => {
-        const info = ANIMALS.find((a) => a.name === name);
-        if (info) totalValue += info.price * count;
-        const idTag = info ? `\`${info.id}\` ` : '';
-        return `${info ? info.emoji : '🐾'} ${idTag}**${name}** × \`${count}\``;
-      });
-
-      let description = lines.join('\n');
-      if (description.length > 3950) {
-        description = description.slice(0, 3900) + '\n... *(အကောင်စာရင်း များလွန်းသဖြင့် အချို့ကို ချုံ့ပြထားပါသည်)*';
+      if (rankLines.length === 0) {
+        return message.reply('🏞️ သင့်တိရစ္ဆာန်ရုံထဲမှာ ဘာမှ မရှိသေးပါဘူး။ `Khunt` ရိုက်ပြီး ဖမ်းကြည့်ပါ!');
       }
 
       const zooEmbed = new EmbedBuilder()
         .setColor('#2ECC71')
         .setAuthor({ name: `${message.author.username} ၏ တိရစ္ဆာန်ရုံ (Zoo)`, iconURL: message.author.displayAvatarURL() })
-        .setDescription(description)
-        .addFields({ name: '💵 စုစုပေါင်း တန်ဖိုး', value: `**${totalValue.toLocaleString()} coins**`, inline: true })
+        .setDescription(rankLines.join('\n\n'))
+        .addFields(
+          { name: '🐾 စုစုပေါင်း အကောင်ရေ', value: `**${totalAnimals.toLocaleString()} ကောင်**`, inline: true },
+          { name: '💵 စုစုပေါင်း တန်ဖိုး', value: `**${totalValue.toLocaleString()} coins**`, inline: true }
+        )
         .setFooter({ text: 'ရောင်းရန်: Ksell <id> [အရေအတွက်] သို့မဟုတ် Ksell all' });
 
       return message.reply({ embeds: [zooEmbed] });
@@ -233,12 +276,13 @@ module.exports = [
       // (ဂ) တစ်ကောင်ချင်း (English ID သို့မဟုတ် မြန်မာနာမည်) ရောင်းချခြင်း
       const targetAnimal = findAnimal(firstArg);
       if (!targetAnimal) {
-        return message.reply(`❌ \`${args[0]}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး! \`Kzoo\` ရိုက်ပြီး ID စစ်ဆေးပါ။`);
+        return message.reply(`❌ \`${args[0]}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး!`);
       }
 
       const ownedCount = (user.zoo && user.zoo[targetAnimal.name]) || 0;
       if (ownedCount <= 0) {
-        return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ ${targetAnimal.emoji} **${targetAnimal.name}** (\`${targetAnimal.id}\`) မရှိပါဘူး။`);
+        const meta = getAnimalMeta(targetAnimal);
+        return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ ${meta.rankEmoji} ${targetAnimal.emoji} **${meta.shortName}** (\`${targetAnimal.id}\`) မရှိပါဘူး။`);
       }
 
       const qtyArg = args[1]?.toLowerCase();
@@ -252,7 +296,8 @@ module.exports = [
           return message.reply('❌ ရောင်းမယ့် အရေအတွက် မှန်ကန်စွာ ထည့်ပါ! (ဥပမာ - `Ksell rabbit 2` သို့မဟုတ် `Ksell rabbit all`)');
         }
         if (sellCount > ownedCount) {
-          return message.reply(`❌ သင့်မှာ ${targetAnimal.emoji} **${targetAnimal.name}** စုစုပေါင်း **${ownedCount} ကောင်** ပဲ ရှိပါတယ်။`);
+          const meta = getAnimalMeta(targetAnimal);
+          return message.reply(`❌ သင့်မှာ ${meta.rankEmoji} ${targetAnimal.emoji} **${meta.shortName}** စုစုပေါင်း **${ownedCount} ကောင်** ပဲ ရှိပါတယ်။`);
         }
       }
 
@@ -268,8 +313,9 @@ module.exports = [
       user.markModified('zoo');
       await user.save();
 
+      const meta = getAnimalMeta(targetAnimal);
       return message.reply(
-        `💵 ${targetAnimal.emoji} **${targetAnimal.name}** (\`${targetAnimal.id}\`) × \`${sellCount}\` ကောင်ကို ရောင်းချလိုက်ရာ **+${earned.toLocaleString()} coins** ရရှိပါပြီ!`
+        `💵 ${meta.rankEmoji} ${targetAnimal.emoji} **${meta.shortName}** (\`${targetAnimal.id}\`) × \`${sellCount}\` ကောင်ကို ရောင်းချလိုက်ရာ **+${earned.toLocaleString()} coins** ရရှိပါပြီ!`
       );
     },
   },
@@ -315,7 +361,8 @@ module.exports = [
         if (!user.zoo) user.zoo = {};
         user.zoo[prizeAnimal.name] = (user.zoo[prizeAnimal.name] || 0) + 1;
         user.markModified('zoo');
-        rewardMessage = `🐾 ရှားပါးတိရစ္ဆာန် ${prizeAnimal.emoji} **${prizeAnimal.name}** (\`${prizeAnimal.id}\`) တစ်ကောင် ပေါက်ပါတယ်!`;
+        const meta = getAnimalMeta(prizeAnimal);
+        rewardMessage = `🐾 ရှားပါးတိရစ္ဆာန် ${meta.rankEmoji} ${prizeAnimal.emoji} **${meta.shortName}** (\`${prizeAnimal.id}\`) တစ်ကောင် ပေါက်ပါတယ်!`;
       }
 
       await user.save();
