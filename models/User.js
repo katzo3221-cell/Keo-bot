@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   dailyStreak: { type: Number, default: 0 },
   lastWork: { type: Number, default: 0 },
   zoo: { type: Object, default: {} },
+  battleTeam: { type: [String], default: [] },
   items: { type: [String], default: [] },
   itemUses: { type: Object, default: {} },
   actions: { type: Object, default: {} },

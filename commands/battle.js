@@ -3,20 +3,50 @@ const { getUser, addExp } = require('../models/User');
 const ANIMALS = require('../data/animals');
 const { SHOP_ITEMS, useCategoryItems } = require('../data/shopItems');
 
-// တိရစ္ဆာန်အဖွဲ့ (Top 3) နှင့် ပစ္စည်း Power တွက်ချက်ပေးမည့် Helper Function
+function findAnimal(query) {
+  const q = query.toLowerCase().trim();
+  return (
+    ANIMALS.find((a) => a.id.toLowerCase() === q) ||
+    ANIMALS.find((a) => a.name.toLowerCase() === q) ||
+    ANIMALS.find((a) => a.name.split(' (')[0].toLowerCase() === q)
+  );
+}
+
+// တိရစ္ဆာန်အဖွဲ့ (စိတ်ကြိုက်ရွေးထားသော ၃ ကောင် သို့မဟုတ် Top 3) နှင့် Power တွက်ချက်ခြင်း
 function getBattleStats(userObj) {
-  const entries = Object.entries(userObj.zoo || {});
   let team = [];
-  for (const [name, count] of entries) {
-    const info = ANIMALS.find((a) => a.name === name);
-    if (info) {
-      for (let i = 0; i < count; i++) {
+  let isCustomTeam = false;
+
+  // ကစားသမား စိတ်ကြိုက်ရွေးထားသော battleTeam ရှိပါက ဦးစားပေးအသုံးပြုခြင်း
+  if (userObj.battleTeam && userObj.battleTeam.length > 0) {
+    const usedCounts = {};
+    for (const id of userObj.battleTeam) {
+      const info = ANIMALS.find((a) => a.id === id);
+      if (!info) continue;
+      const owned = (userObj.zoo && userObj.zoo[info.name]) || 0;
+      const used = usedCounts[info.name] || 0;
+      if (owned > used) {
         team.push(info);
+        usedCounts[info.name] = used + 1;
       }
     }
+    if (team.length > 0) isCustomTeam = true;
   }
-  team.sort((a, b) => b.price - a.price);
-  team = team.slice(0, 3);
+
+  // စိတ်ကြိုက်အဖွဲ့ မရွေးရသေးပါက အကောင်းဆုံး ၃ ကောင်ကို အလိုအလျောက် ရွေးပေးခြင်း
+  if (team.length === 0) {
+    const entries = Object.entries(userObj.zoo || {});
+    for (const [name, count] of entries) {
+      const info = ANIMALS.find((a) => a.name === name);
+      if (info) {
+        for (let i = 0; i < count; i++) {
+          team.push(info);
+        }
+      }
+    }
+    team.sort((a, b) => b.price - a.price);
+    team = team.slice(0, 3);
+  }
 
   let itemPower = 0;
   for (const itemId of userObj.items || []) {
@@ -30,13 +60,94 @@ function getBattleStats(userObj) {
   const levelBonus = (userObj.level || 1) * 25;
   const totalPower = basePower + levelBonus + itemPower + Math.floor(Math.random() * 200);
 
-  return { team, totalPower, itemPower };
+  return { team, totalPower, itemPower, basePower, isCustomTeam };
+}
+
+// Kteam / Kb select လုပ်ဆောင်ချက်
+async function handleTeamCommand(message, args, user) {
+  const sub = args[0]?.toLowerCase();
+
+  // အဖွဲ့ ရှင်းလင်းပြီး Auto ပြန်ထားခြင်း
+  if (sub === 'clear' || sub === 'reset' || sub === 'auto') {
+    user.battleTeam = [];
+    await user.save();
+    return message.reply('✅ စိတ်ကြိုက်တိုက်ပွဲအဖွဲ့ကို ဖျက်သိမ်းလိုက်ပါပြီ! နောက်ပိုင်း `Kbattle` တွင် အကောင်းဆုံး ၃ ကောင်ကို အလိုအလျောက် ရွေးပေးပါမယ်။');
+  }
+
+  // အဖွဲ့အသစ် ရွေးချယ်သတ်မှတ်ခြင်း (ဥပမာ - Kteam dragon phoenix lion)
+  const picks = sub === 'set' ? args.slice(1) : args;
+  if (picks.length > 0) {
+    if (picks.length > 3) {
+      return message.reply('❌ တိုက်ပွဲအဖွဲ့တွင် အများဆုံး **၃ ကောင်** အထိသာ ရွေးချယ်နိုင်ပါတယ်!');
+    }
+
+    const chosenAnimals = [];
+    const neededCounts = {};
+
+    for (const rawId of picks) {
+      const animal = findAnimal(rawId);
+      if (!animal) {
+        return message.reply(`❌ \`${rawId}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး! \`Kzoo\` ရိုက်ပြီး ID စစ်ဆေးပါ။`);
+      }
+      neededCounts[animal.name] = (neededCounts[animal.name] || 0) + 1;
+      const owned = (user.zoo && user.zoo[animal.name]) || 0;
+      if (owned < neededCounts[animal.name]) {
+        return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ ${animal.emoji} **${animal.name}** (\`${animal.id}\`) လုံလောက်အောင် မရှိပါဘူး! (ပိုင်ဆိုင်မှု: **${owned} ကောင်**)`);
+      }
+      chosenAnimals.push(animal);
+    }
+
+    user.battleTeam = chosenAnimals.map((a) => a.id);
+    await user.save();
+
+    const teamList = chosenAnimals
+      .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Power: \`${a.price.toLocaleString()}\``)
+      .join('\n');
+
+    return message.reply(
+      `⚔️ **တိုက်ပွဲဝင်မည့် အဖွဲ့ (Battle Team) ကို ရွေးချယ်သတ်မှတ်ပြီးပါပြီ!**\n${teamList}\n*(တိုက်ခိုက်ရန် \`Kbattle\` ကို ရိုက်ပါ)*`
+    );
+  }
+
+  // လက်ရှိ Battle Team ကြည့်ရှုခြင်း (Kteam)
+  const stats = getBattleStats(user);
+  if (stats.team.length === 0) {
+    return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
+  }
+
+  const modeLabel = stats.isCustomTeam ? '🎯 စိတ်ကြိုက်ရွေးထားသော အဖွဲ့' : '⚡ အလိုအလျောက် အကောင်းဆုံး အဖွဲ့ (Auto Top 3)';
+  const currentList = stats.team
+    .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Base Power: \`${a.price.toLocaleString()}\``)
+    .join('\n');
+
+  const teamEmbed = new EmbedBuilder()
+    .setColor('#E67E22')
+    .setAuthor({ name: `${message.author.username} ၏ Battle Team`, iconURL: message.author.displayAvatarURL() })
+    .setDescription(`**ပုံစံ:** ${modeLabel}\n\n${currentList}`)
+    .addFields({ name: '💥 အဖွဲ့စုစုပေါင်း Base Power', value: `**${stats.basePower.toLocaleString()}**`, inline: true })
+    .setFooter({ text: 'ပြောင်းရွေးရန်: Kteam <id1> [id2] [id3] | ပြန်ဖျက်ရန်: Kteam clear' });
+
+  return message.reply({ embeds: [teamEmbed] });
 }
 
 module.exports = [
+  // ၁။ တိုက်ပွဲဝင် အကောင်ရွေးချယ်ခြင်း (Kteam / Kselect)
+  {
+    names: ['team', 'select'],
+    async execute(message, args, user) {
+      return handleTeamCommand(message, args, user);
+    },
+  },
+
+  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP (Kbattle / Kb)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
+      // Kb select <id1> <id2> <id3> ပုံစံဖြင့် ရိုက်လျှင်လည်း အလုပ်လုပ်စေရန်
+      if (args[0] && ['select', 'team'].includes(args[0].toLowerCase())) {
+        return handleTeamCommand(message, args.slice(1), user);
+      }
+
       const myStats = getBattleStats(user);
       if (myStats.team.length === 0) {
         return message.reply('❌ တိုက်ပွဲဝင်ဖို့ တိရစ္ဆာန် တစ်ကောင်မှ မရှိသေးပါဘူး! `Khunt` ရိုက်ပြီး အရင်ဖမ်းပါ။');
