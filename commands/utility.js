@@ -83,7 +83,7 @@ module.exports = [
           { name: '🔥 Daily Streak', value: `**${targetUser.dailyStreak || 0} ရက်**`, inline: true },
           { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `Active: **${activeCount}** | အိတ်ထဲ: **${storedCount}**`, inline: true },
           { name: '📅 ယနေ့ Profile EXP Limit', value: `**${todayExp.toLocaleString()} / ${DAILY_PROFILE_EXP_LIMIT.toLocaleString()} EXP**`, inline: true },
-          { name: '💍 အိမ်ထောင်ရေး (Marriage)', value: marriageText, inline: false },
+          { name: '💍 Marriage', value: marriageText, inline: false },
           { name: '📊 Profile Level တိုးတက်မှု', value: `${pBar} (${Math.floor((pExp / pNeeded) * 100)}%)` },
           { name: '💥 Battle Level တိုးတက်မှု', value: `${bBar} (${Math.floor((bExp / bNeeded) * 100)}%)` }
         )
