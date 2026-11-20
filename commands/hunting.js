@@ -207,7 +207,7 @@ module.exports = [
       user.markModified('zoo');
 
       const caughtListText = Object.values(caughtSummary)
-        .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}** (\`${data.id}\`)${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
+        .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}**${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
         .join('၊ ');
 
       // တောထဲမှ Item ရှာတွေ့ခြင်း (တစ်ရက်လျှင် အများဆုံး ၃ ခု Limit)
