@@ -257,18 +257,34 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
+ // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
   {
     names: ['zoo', 'z', 'zooid'],
     async execute(message, args, user, commandName) {
       const zooData = user.zoo || {};
-      const hasAnimals = ANIMALS.some((a) => (zooData[a.name] || 0) > 0);
+      const hasAnimals = ANIMALS.some((a) => (Number(zooData[a.name]) || 0) > 0);
 
       if (!hasAnimals) {
         return message.reply('🏞️ သင့်တိရစ္ဆာန်ရုံထဲမှာ ဘာမှ မရှိသေးပါဘူး။ `Khunt` ရိုက်ပြီး ဖမ်းကြည့်ပါ!');
       }
 
-      const buildZooEmbed = (showIds) => {
+      const SHORT_RANK_LABELS = {
+        Common: 'Common',
+        Uncommon: 'Uncommon',
+        Rare: 'Rare',
+        'Super Rare': 'S.Rare',
+        Epic: 'Epic',
+        'Ultra Epic': 'U.Epic',
+        Legendary: 'Legend',
+        Mythical: 'Mythic',
+        Divine: 'Divine',
+        Celestial: 'Celestial',
+      };
+
+      let showIds = commandName === 'zooid' || ['id', 'ids', 'list'].includes(args[0]?.toLowerCase());
+      let page = 0;
+
+      const buildZooView = () => {
         let totalValue = 0;
         let totalAnimals = 0;
         const rankLines = [];
@@ -278,36 +294,59 @@ module.exports = [
 
         for (const rankInfo of ranksOrder) {
           const rankTag = `(${rankInfo.name})`;
-          const ownedInRank = ANIMALS.filter((a) => a.name.endsWith(rankTag) && (zooData[a.name] || 0) > 0);
+          const ownedInRank = ANIMALS.filter(
+            (a) => a.name.endsWith(rankTag) && (Number(zooData[a.name]) || 0) > 0
+          );
 
           if (ownedInRank.length > 0) {
             const listText = ownedInRank
               .map((a) => {
-                const count = zooData[a.name];
+                const count = Number(zooData[a.name]) || 0;
                 totalValue += a.price * count;
                 totalAnimals += count;
                 return showIds
                   ? `${a.emoji}\`${a.id}\`×${count}`
-                  : `${a.emoji}\`×${count}\``;
+                  : `${a.emoji}×${count}`;
               })
               .join(' ');
 
-            rankLines.push(`${rankInfo.emoji} **${rankInfo.name}** ➔ ${listText}`);
+            const label = SHORT_RANK_LABELS[rankInfo.name] || rankInfo.name;
+            rankLines.push(`${rankInfo.emoji}**${label}** ➔ ${listText}`);
           }
         }
 
-        let desc = rankLines.join('\n\n');
-        if (desc.length > 4000) {
-          desc = desc.slice(0, 3950) + '\n... *(အကောင်များလွန်းသဖြင့် အချို့ကို ချုံ့ပြထားပါသည်)*';
+        // စာလုံး 3,800 ထက်ကျော်ပါက Page ခွဲပြမည် (Celestial နှင့် အောက်ဆုံးအတန်းများ မပြတ်စေရန်)
+        const pages = [];
+        let currentLines = [];
+        let currentLen = 0;
+
+        for (const line of rankLines) {
+          if (currentLen + line.length + 1 > 3800 && currentLines.length > 0) {
+            pages.push(currentLines.join('\n'));
+            currentLines = [line];
+            currentLen = line.length;
+          } else {
+            currentLines.push(line);
+            currentLen += line.length + 1;
+          }
+        }
+        if (currentLines.length > 0) {
+          pages.push(currentLines.join('\n'));
         }
 
-        return new EmbedBuilder()
+        const totalPages = Math.max(1, pages.length);
+        if (page >= totalPages) page = totalPages - 1;
+        if (page < 0) page = 0;
+
+        const pageNote = totalPages > 1 ? ` • စာမျက်နှာ ${page + 1}/${totalPages}` : '';
+
+        const embed = new EmbedBuilder()
           .setColor(showIds ? '#3498DB' : '#2ECC71')
           .setAuthor({
-            name: `${message.author.username} ၏ တိရစ္ဆာန်ရုံ (${showIds ? 'ID စာရင်း — အားအကောင်းဆုံးမှ အစဉ်လိုက်' : 'Zoo'})`,
+            name: `${message.author.username} ၏ တိရစ္ဆာန်ရုံ (${showIds ? 'ID စာရင်း' : 'Zoo'}${pageNote})`,
             iconURL: message.author.displayAvatarURL(),
           })
-          .setDescription(desc)
+          .setDescription(pages[page])
           .addFields(
             { name: '🐾 စုစုပေါင်း အကောင်ရေ', value: `**${totalAnimals.toLocaleString()} ကောင်**`, inline: true },
             { name: '💵 စုစုပေါင်း တန်ဖိုး', value: `**${totalValue.toLocaleString()} coins**`, inline: true }
@@ -317,21 +356,37 @@ module.exports = [
               ? 'အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell <id> [အရေအတွက်]'
               : 'ID ကြည့်ရန်: Kzoo id | အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell all',
           });
-      };
 
-      const buildToggleRow = (showIds) =>
-        new ActionRowBuilder().addComponents(
+        const buttons = [
           new ButtonBuilder()
             .setCustomId('zoo_toggle_id')
-            .setLabel(showIds ? '🐾 အကျဉ်းကြည့်ရန် (Emoji Only)' : '🆔 ID များကြည့်ရန် (For Kteam)')
-            .setStyle(showIds ? ButtonStyle.Secondary : ButtonStyle.Primary)
-        );
+            .setLabel(showIds ? '🐾 အကျဉ်းကြည့်ရန်' : '🆔 ID များကြည့်ရန်')
+            .setStyle(showIds ? ButtonStyle.Secondary : ButtonStyle.Primary),
+        ];
 
-      let showIds = commandName === 'zooid' || ['id', 'ids', 'list'].includes(args[0]?.toLowerCase());
+        if (totalPages > 1) {
+          buttons.push(
+            new ButtonBuilder()
+              .setCustomId('zoo_prev')
+              .setLabel('◀️ ရှေ့')
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(page === 0),
+            new ButtonBuilder()
+              .setCustomId('zoo_next')
+              .setLabel('နောက် ▶️')
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(page === totalPages - 1)
+          );
+        }
 
+        const row = new ActionRowBuilder().addComponents(buttons);
+        return { embed, row };
+      };
+
+      const initial = buildZooView();
       const zooMsg = await message.reply({
-        embeds: [buildZooEmbed(showIds)],
-        components: [buildToggleRow(showIds)],
+        embeds: [initial.embed],
+        components: [initial.row],
       });
 
       const collector = zooMsg.createMessageComponentCollector({ time: 60000 });
@@ -343,11 +398,18 @@ module.exports = [
 
         if (i.customId === 'zoo_toggle_id') {
           showIds = !showIds;
-          await i.update({
-            embeds: [buildZooEmbed(showIds)],
-            components: [buildToggleRow(showIds)],
-          });
+          page = 0;
+        } else if (i.customId === 'zoo_prev') {
+          page -= 1;
+        } else if (i.customId === 'zoo_next') {
+          page += 1;
         }
+
+        const updated = buildZooView();
+        await i.update({
+          embeds: [updated.embed],
+          components: [updated.row],
+        });
       });
 
       collector.on('end', async () => {

@@ -246,10 +246,12 @@ module.exports = [
           .map((u) => {
             let totalValue = 0;
             let totalCount = 0;
-            for (const [name, count] of Object.entries(u.zoo || {})) {
-              if (count > 0) {
+            for (const [name, rawCount] of Object.entries(u.zoo || {})) {
+              const count = Number(rawCount) || 0;
+              const price = animalPriceMap.get(name);
+              if (count > 0 && price !== undefined) {
                 totalCount += count;
-                totalValue += (animalPriceMap.get(name) || 0) * count;
+                totalValue += price * count;
               }
             }
             return { username: u.username, totalValue, totalCount };

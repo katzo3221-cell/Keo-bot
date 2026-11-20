@@ -131,4 +131,41 @@ module.exports = [
       return message.reply({ embeds: [statsEmbed] });
     },
   },
+  // ၆။ Database ထဲရှိ Zoo String Data များကို Number စစ်စစ် ပြန်ပြောင်းခြင်း (Kfixzoo)
+  {
+    names: ['fixzoo'],
+    async execute(message) {
+      if (!isOwner(message.author.id)) {
+        return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
+      }
+
+      const allUsers = await User.find({});
+      let fixedUsers = 0;
+
+      for (const u of allUsers) {
+        if (!u.zoo || typeof u.zoo !== 'object') continue;
+        let changed = false;
+        const cleanZoo = {};
+
+        for (const [name, rawCount] of Object.entries(u.zoo)) {
+          const num = Number(rawCount);
+          if (typeof rawCount !== 'number' || isNaN(num)) {
+            changed = true;
+          }
+          if (!isNaN(num) && num > 0) {
+            cleanZoo[name] = Math.floor(num);
+          }
+        }
+
+        if (changed) {
+          u.zoo = cleanZoo;
+          u.markModified('zoo');
+          await u.save();
+          fixedUsers += 1;
+        }
+      }
+
+      return message.reply(`✅ Database စစ်ဆေးပြီးပါပြီ! စုစုပေါင်း User **${fixedUsers} ဦး** ရဲ့ Zoo Data များကို Number စစ်စစ် ပြန်ပြောင်းပေးလိုက်ပါပြီ။`);
+    },
+  },
 ];
