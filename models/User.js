@@ -41,6 +41,12 @@ const userSchema = new mongoose.Schema({
   lastWork: { type: Number, default: 0 },
   zoo: { type: Object, default: {} },
   battleTeam: { type: [String], default: [] },
+  // Marriage & Ring System
+  rings: { type: Object, default: {} },
+  marriedTo: { type: String, default: null },
+  marriedToName: { type: String, default: null },
+  marriedRing: { type: String, default: null },
+  marriedAt: { type: Date, default: null },
 
   // လက်ရှိ တပ်ဆင်အသုံးပြုနေသော Item များ နှင့် ကျန်ရှိအကြိမ်ရေ
   items: { type: [String], default: [] },

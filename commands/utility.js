@@ -1,4 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
+const { getUser } = require('../models/User');
+const { RINGS } = require('../data/rings');
 const {
   DAILY_PROFILE_EXP_LIMIT,
   DAILY_QUESTS_LIST,
@@ -22,37 +24,66 @@ function formatDuration(ms) {
 module.exports = [
   // ၁။ Profile Level နှင့် Battle Level ခွဲပြခြင်း (Kprofile / Klvl / Klevel)
   {
-    names: ['profile', 'lvl', 'level'],
+    names: ['profile', 'p', 'lvl', 'level'],
     async execute(message, args, user) {
-      const pLevel = user.level || 1;
-      const pExp = user.exp || 0;
+      const targetDiscordUser = message.mentions.users.first() || message.author;
+      if (targetDiscordUser.bot) {
+        return message.reply('❌ Bot များ၏ Profile ကို ကြည့်၍ မရပါ!');
+      }
+
+      const targetUser =
+        targetDiscordUser.id === message.author.id
+          ? user
+          : await getUser(targetDiscordUser.id, targetDiscordUser.username);
+
+      const pLevel = targetUser.level || 1;
+      const pExp = targetUser.exp || 0;
       const pNeeded = pLevel * 150;
       const pProgress = Math.min(10, Math.floor((pExp / pNeeded) * 10));
       const pBar = '🟦'.repeat(pProgress) + '⬜'.repeat(10 - pProgress);
 
-      const bLevel = user.battleLevel || 1;
-      const bExp = user.battleExp || 0;
+      const bLevel = targetUser.battleLevel || 1;
+      const bExp = targetUser.battleExp || 0;
       const bNeeded = bLevel * 100;
       const bProgress = Math.min(10, Math.floor((bExp / bNeeded) * 10));
       const bBar = '🟥'.repeat(bProgress) + '⬜'.repeat(10 - bProgress);
 
       const todayStr = getTodayMyanmarDate();
-      const todayExp = user.dailyProfileExpDate === todayStr ? (user.dailyProfileExpCount || 0) : 0;
+      const todayExp = targetUser.dailyProfileExpDate === todayStr ? (targetUser.dailyProfileExpCount || 0) : 0;
 
       // လက်ရှိတပ်ဆင်ထားသော Item နှင့် အိတ်ထဲသိမ်းထားသော Item နှစ်ခုလုံး ရေတွက်ခြင်း
-      const activeCount = (user.items || []).length;
-      const storedCount = Object.values(user.storedItems || {}).reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
+      const activeCount = (targetUser.items || []).length;
+      const storedCount = Object.values(targetUser.storedItems || {}).reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
+
+      // တပ်ဆင်ထားသော လက်စွပ်နှင့် Profile Border Color ရှာဖွေခြင်း
+      const equippedRing = targetUser.marriedRing
+        ? RINGS.find((r) => r.id === targetUser.marriedRing)
+        : null;
+      const borderColor = equippedRing ? equippedRing.color : '#3498DB';
+
+      let marriageText = '💔 တစ်ကိုယ်တည်း (Single)';
+      if (targetUser.marriedTo && equippedRing) {
+        const days = targetUser.marriedAt
+          ? Math.floor((Date.now() - new Date(targetUser.marriedAt).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+        const daysText = days <= 0 ? 'ယနေ့ လက်ထပ်' : `${days} ရက်`;
+        marriageText = `${equippedRing.emoji} **${equippedRing.name}** (${equippedRing.mmName})\n💞 <@${targetUser.marriedTo}> • *(${daysText})*`;
+      }
 
       const profileEmbed = new EmbedBuilder()
-        .setColor('#3498DB')
-        .setAuthor({ name: `${message.author.username} ၏ ကိုယ်ရေးအကျဉ်း (Profile)`, iconURL: message.author.displayAvatarURL() })
+        .setColor(borderColor)
+        .setAuthor({
+          name: `${targetDiscordUser.username} ၏ ကိုယ်ရေးအကျဉ်း (Profile)`,
+          iconURL: targetDiscordUser.displayAvatarURL(),
+        })
         .addFields(
           { name: '🏅 Profile Level', value: `**Lv.${pLevel}** (${pExp}/${pNeeded} EXP)`, inline: true },
           { name: '⚔️ Battle Level', value: `**Lv.${bLevel}** (${bExp}/${bNeeded} EXP)`, inline: true },
-          { name: '🎁 Lucky Crates (`lc`)', value: `**${user.boxes || 0} လုံး**`, inline: true },
-          { name: '🔥 Daily Streak', value: `**${user.dailyStreak || 0} ရက်**`, inline: true },
+          { name: '🎁 Lucky Crates (`lc`)', value: `**${targetUser.boxes || 0} လုံး**`, inline: true },
+          { name: '🔥 Daily Streak', value: `**${targetUser.dailyStreak || 0} ရက်**`, inline: true },
           { name: '🎒 ပိုင်ဆိုင်သော ပစ္စည်း', value: `Active: **${activeCount}** | အိတ်ထဲ: **${storedCount}**`, inline: true },
           { name: '📅 ယနေ့ Profile EXP Limit', value: `**${todayExp.toLocaleString()} / ${DAILY_PROFILE_EXP_LIMIT.toLocaleString()} EXP**`, inline: true },
+          { name: '💍 အိမ်ထောင်ရေး (Marriage)', value: marriageText, inline: false },
           { name: '📊 Profile Level တိုးတက်မှု', value: `${pBar} (${Math.floor((pExp / pNeeded) * 100)}%)` },
           { name: '💥 Battle Level တိုးတက်မှု', value: `${bBar} (${Math.floor((bExp / bNeeded) * 100)}%)` }
         )
@@ -245,8 +276,9 @@ module.exports = [
           { name: '🏹 Hunting & Lucky Crate', value: '`Khunt` (`Kh`), `Kzoo` (`Kz`), `Kzoo id` (`Kzooid`), `Ksell <id> [အရေအတွက်/all]`, `Ksell <rank>`, `Ksell all`, `Kopen lc [အရေအတွက်/all]`' },
           { name: '🎲 Gambling (လောင်းကစား & PvP)', value: '`Kcf <amount/all> [h/t]`, `Ks <amount/all>`, `Kd <amount/all> <s/b/t>`, `Kbj [@user] <amount/all>`, `Kskm [@user] <amount/all>`, `Kgin <amount/all> [အကောင်]`, `Kmine <amount/all> [ဗုံး 1-6]` (3×3), `Kmines <amount/all> [ဗုံး 1-11]` (4×4), `Krps @user <amount/all>`' },
           { name: '⚔️ Battle (တိုက်ခိုက်ခြင်း)', value: '`Kbattle` (`Kb`), `Kbattle @user`, `Kteam <id1> [id2] [id3]`, `Kteam clear`' },
-          { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Klick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
-          { name: '🛠️ Utility, Quest & Profile', value: '`Kprofile` (`Klvl`), `Kcd`, `Kquest` (`Kquest claim`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
+          { name: '🤗 Actions (လှုပ်ရှားမှု ၂၂ မျိုး)', value: '`Kcuddle`, `Khug`, `Kkiss`, `Kclick`, `Knom`, `Kpat`, `Kpoke`, `Kslap`, `Kstare`, `Khighfive`, `Kbite`, `Kgreet`, `Kpunch`, `Khandholding`, `Ktickle`, `Kkill`, `Khold`, `Kpats`, `Kwave`, `Kboop`, `Ksnuggle`, `Kbully` (`@user`)' },
+          { name: '💍 Marriage (လက်ထပ်စနစ်)', value: '`Kbuy <ring1-5>`, `Kmarry @user <ring1-5>`, `Kdivorce`, `Kprofile [@user]`' },
+          { name: '🛠️ Utility, Quest & Profile', value: '`Kprofile [@user]` (`Klvl`), `Kcd`, `Kquest` (`Kquest claim`), `Kavater` (`Kavatar` `[@user]`), `Krepeat [အကြိမ်ရေ] <စာသား>`, `Khelp`' }
         )
         .setFooter({ text: 'ပျော်ရွှင်စွာ ကစားနိုင်ပါစေ!' });
 

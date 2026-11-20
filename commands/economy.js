@@ -8,7 +8,7 @@ const {
   findItemById,
   getActiveItemByType,
 } = require('../data/shopItems');
-
+const { RINGS, findRing } = require('../data/rings');
 module.exports = [
   // ၁။ လက်ကျန်ငွေ စစ်ဆေးခြင်း (Kcash / Kbal)
   {
@@ -313,12 +313,19 @@ module.exports = [
         return `${header}\n${rows}`;
       });
 
+      const ringRows = RINGS.map((r) => {
+        const owned = Number((user.rings && user.rings[r.id]) || 0);
+        const ownedNote = owned > 0 ? ` *(ပိုင်ဆိုင်: ×${owned})*` : '';
+        return `${r.emoji} **[R${r.rank}] ${r.name}** (${r.mmName}) (\`${r.id}\`) — 💰 **${r.price.toLocaleString()} coins**${ownedNote}`;
+      }).join('\n');
+
+      sections.push(`**💍 Marriage Rings (လက်ထပ်လက်စွပ်များ — \`Kbuy <ringId>\` ➔ \`Kmarry @user <ringId>\`)**\n${ringRows}`);
+
       const shopEmbed = new EmbedBuilder()
         .setColor('#9B59B6')
-        .setTitle('🏪 Keo အရောင်းဆိုင် (Rank 1 - 3 Hunt Items)')
+        .setTitle('🏪 Keo အရောင်းဆိုင် (Hunt Items & Marriage Rings)')
         .setDescription(sections.join('\n\n'))
-        .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> | Rank 4 (🟠) - Rank 7 (🌌) ကို Khunt နှင့် Kopen lc မှသာ ရနိုင်ပါသည်' });
-
+        .setFooter({ text: 'ဝယ်ရန်: Kbuy <id> [အရေအတွက်] | လက်ထပ်ရန်: Kmarry @user <ringId>' });
       return message.reply({ embeds: [shopEmbed] });
     },
   },
@@ -328,6 +335,35 @@ module.exports = [
     names: ['buy'],
     async execute(message, args, user) {
       const itemId = args[0] ? args[0].toLowerCase().trim() : null;
+      // Marriage Ring ဝယ်ယူခြင်း (Kbuy ring1 [အရေအတွက်])
+      const targetRing = findRing(itemId);
+      if (targetRing) {
+        let qty = 1;
+        if (args[1] !== undefined) {
+          qty = parseInt(args[1], 10);
+          if (isNaN(qty) || qty < 1 || qty > 50) {
+            return message.reply('❌ ဝယ်ယူမည့် အရေအတွက်ကို **၁ မှ ၅၀** အတွင်း မှန်ကန်စွာ ထည့်ပါ!');
+          }
+        }
+
+        const totalCost = targetRing.price * qty;
+        if (user.balance < totalCost) {
+          return message.reply(
+            `❌ လက်ကျန်ငွေ မလုံလောက်ပါ! ${targetRing.emoji} **${targetRing.name}** ×${qty} အတွက် **${totalCost.toLocaleString()} coins** လိုအပ်ပါတယ်။`
+          );
+        }
+
+        user.balance -= totalCost;
+        user.rings = user.rings || {};
+        user.rings[targetRing.id] = (Number(user.rings[targetRing.id]) || 0) + qty;
+        user.markModified('rings');
+        await user.save();
+
+        return message.reply(
+          `🛍️ ${targetRing.emoji} **${targetRing.name}** (${targetRing.mmName}) **×${qty}** ကို **${totalCost.toLocaleString()} coins** ဖြင့် ဝယ်ယူပြီးပါပြီ!\n` +
+          `*(လက်ထပ်ခွင့်တောင်းရန်: \`Kmarry @user ${targetRing.id}\`)*`
+        );
+      }
       const item = SHOP_ITEMS.find((i) => i.id === itemId);
 
       if (!item) {
@@ -468,6 +504,13 @@ module.exports = [
           .join('\n');
 
         sections.push(`🎒 **အိတ်ထဲ သိမ်းထားသော အပိုပစ္စည်းများ (\`Kuse <id>\` ဖြင့် သုံးရန်):**\n${storedLines}`);
+      }
+      const ownedRingLines = RINGS
+        .filter((r) => (Number(user.rings?.[r.id]) || 0) > 0)
+        .map((r) => `${r.emoji} **[R${r.rank}] ${r.name}** (${r.mmName}) (\`${r.id}\`) × **${Number(user.rings[r.id])} ကွင်း**`);
+
+      if (ownedRingLines.length > 0) {
+        sections.push(`💍 **လက်ထပ်လက်စွပ်များ (\`Kmarry @user <ringId>\` ဖြင့် စွပ်ပေးရန်):**\n${ownedRingLines.join('\n')}`);
       }
 
       if (sections.length === 0) {
