@@ -159,17 +159,18 @@ module.exports = [
       if (!user.zoo) user.zoo = {};
       const caughtSummary = {};
 
-      // Mythical / Divine / Celestial အမြဲမမိအောင် ချိန်ညှိထားသော Weight စနစ်
+      // Rank နာမည်အလိုက် Luck Bonus တွက်ချက်ခြင်း (Celestial/Divine အလွယ်တကူမမိစေရန်)
       const weightedAnimals = ANIMALS.map((animal) => {
+        const { rank } = getAnimalMeta(animal);
         let multiplier = 1;
-        if (animal.price >= 18000) {
-          multiplier = 1 + totalLuck * 0.04; // Mythical, Divine, Celestial
-        } else if (animal.price >= 8000) {
-          multiplier = 1 + totalLuck * 0.045; // Legendary
-        } else if (animal.price >= 1000) {
-          multiplier = 1 + totalLuck * 0.035; // Epic, Ultra Epic
-        } else if (animal.price >= 60) {
-          multiplier = 1 + totalLuck * 0.02; // Rare, Super Rare
+        if (['Mythical', 'Divine', 'Celestial'].includes(rank)) {
+          multiplier = 1 + totalLuck * 0.015;
+        } else if (rank === 'Legendary') {
+          multiplier = 1 + totalLuck * 0.025;
+        } else if (['Epic', 'Ultra Epic'].includes(rank)) {
+          multiplier = 1 + totalLuck * 0.03;
+        } else if (['Rare', 'Super Rare'].includes(rank)) {
+          multiplier = 1 + totalLuck * 0.02;
         }
         return { animal, weight: animal.chance * multiplier };
       });
@@ -647,7 +648,7 @@ module.exports = [
       const wonAnimals = {};
       const wonItems = {};
 
-      const rarePool = ANIMALS.filter((a) => a.price >= 60); // Rare မှ Celestial အထိ
+      const rarePool = ANIMALS.filter((a) => !['Common', 'Uncommon'].includes(getAnimalMeta(a).rank)); // Rare မှ Celestial အထိ
       const poolWeight = rarePool.reduce((sum, a) => sum + a.chance, 0);
       const highRankItems = SHOP_ITEMS.filter((i) => i.rank >= 4); // Rank 4 မှ 7 အထိ
 
