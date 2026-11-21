@@ -3,9 +3,121 @@ const { getUser, addBattleExp, updateQuestProgress } = require('../models/User')
 const { findAnimal } = require('../utils/helpers');
 const ANIMALS = require('../data/animals');
 
+// Rank ၁၀ ဆင့်အလိုက် သီးသန့် Battle Power (အရောင်းဈေးနှုန်းနှင့် ခွဲထုတ်ထားသည်)
+const RANK_ORDER = [
+  'Common',
+  'Uncommon',
+  'Rare',
+  'Super Rare',
+  'Epic',
+  'Ultra Epic',
+  'Legendary',
+  'Mythical',
+  'Divine',
+  'Celestial',
+];
+
+const RANK_POWER = {
+  Common: 50,
+  Uncommon: 120,
+  Rare: 250,
+  'Super Rare': 500,
+  Epic: 900,
+  'Ultra Epic': 1600,
+  Legendary: 2800,
+  Mythical: 4500,
+  Divine: 7500,
+  Celestial: 12000,
+};
+
+// တိရစ္ဆာန်၏ Rank နှင့် Battle Power ခွဲထုတ်ခြင်း
+function getAnimalRank(animal) {
+  const match = animal.name.match(/\(([^)]+)\)$/);
+  return match && RANK_POWER[match[1]] ? match[1] : 'Common';
+}
+
+function getAnimalRankIndex(animal) {
+  const idx = RANK_ORDER.indexOf(getAnimalRank(animal));
+  return idx >= 0 ? idx : 0;
+}
+
+function getAnimalPower(animal) {
+  return RANK_POWER[getAnimalRank(animal)] || 50;
+}
+
+// Rank တစ်ခုချင်းစီအလိုက် တိရစ္ဆာန်အုပ်စုများ ကြိုတင်ခွဲထားခြင်း
+const ANIMALS_BY_RANK = RANK_ORDER.map((rankName) =>
+  ANIMALS.filter((a) => getAnimalRank(a) === rankName)
+);
+
 // တိရစ္ဆာန်ရုံထဲတွင် အကောင်ရှိမရှိ စစ်ဆေးခြင်း
 function hasAnyAnimal(userObj) {
   return Object.values(userObj.zoo || {}).some((count) => count > 0);
+}
+
+// Battle Level နှင့် သုံးထားသော အကောင်များ၏ Rank ပေါ်မူတည်၍ Solo အခက်အခဲ သတ်မှတ်ခြင်း
+function getSoloDifficulty(battleLevel, avgRankIdx) {
+  const score = Math.min(100, Math.floor((battleLevel - 1) * 2.2 + avgRankIdx * 5));
+
+  if (score < 20) {
+    return {
+      label: '🟢 Easy (အလွယ်)',
+      color: '#2ECC71',
+      levelOffset: -1,
+      powerScale: 0.85,
+      rankChances: { lower: 0.50, same: 0.45 }, // higher: 5%
+      bonusExp: 0,
+      crateChance: 0.15,
+    };
+  }
+  if (score < 40) {
+    return {
+      label: '🔵 Normal (ပုံမှန်)',
+      color: '#3498DB',
+      levelOffset: 0,
+      powerScale: 0.90,
+      rankChances: { lower: 0.35, same: 0.55 }, // higher: 10%
+      bonusExp: 10,
+      crateChance: 0.15,
+    };
+  }
+  if (score < 60) {
+    return {
+      label: '🟠 Hard (ခက်ခဲ)',
+      color: '#E67E22',
+      levelOffset: 0,
+      powerScale: 0.95,
+      rankChances: { lower: 0.25, same: 0.55 }, // higher: 20%
+      bonusExp: 20,
+      crateChance: 0.18,
+    };
+  }
+  if (score < 80) {
+    return {
+      label: '🔴 Extreme (အလွန်ခက်)',
+      color: '#E74C3C',
+      levelOffset: 1,
+      powerScale: 0.98,
+      rankChances: { lower: 0.20, same: 0.55 }, // higher: 25%
+      bonusExp: 35,
+      crateChance: 0.20,
+    };
+  }
+  return {
+    label: '💀 Nightmare (ငရဲအဆင့်)',
+    color: '#8E44AD',
+    levelOffset: 2,
+    powerScale: 1.00,
+    rankChances: { lower: 0.15, same: 0.55 }, // higher: 30%
+    bonusExp: 50,
+    crateChance: 0.22,
+  };
+}
+
+// ±8% Random Power Swing တွက်ချက်ခြင်း
+function applyBattleSwing(staticPower) {
+  const swing = 0.92 + Math.random() * 0.16;
+  return Math.max(1, Math.round(staticPower * swing));
 }
 
 // ကစားသမား ကိုယ်တိုင်ရွေးထားသော Battle Team နှင့် Level Power တွက်ချက်ခြင်း
@@ -27,13 +139,63 @@ function getBattleStats(userObj) {
   }
 
   const bLevel = userObj.battleLevel || 1;
-  const basePower = team.reduce((sum, a) => sum + a.price, 0);
-  // Level 1 ဆင့်တက်တိုင်း Base Power +2% နှင့် အခြေခံ +25 Power တိုးပေးမည်
-  const levelPercent = (bLevel - 1) * 2;
-  const levelBonus = Math.floor(basePower * (levelPercent / 100)) + (bLevel * 25);
-  const totalPower = basePower + levelBonus + Math.floor(Math.random() * 200);
+  const basePower = team.reduce((sum, a) => sum + getAnimalPower(a), 0);
+  const avgRankIdx = team.length > 0
+    ? team.reduce((sum, a) => sum + getAnimalRankIndex(a), 0) / team.length
+    : 0;
 
-  return { team, totalPower, basePower, levelBonus, levelPercent, battleLevel: bLevel };
+  // Battle Level 1 ဆင့်တက်တိုင်း Base Power +3% နှင့် အခြေခံ +15 Power တိုးပေးမည်
+  const levelPercent = (bLevel - 1) * 3;
+  const levelBonus = Math.floor(basePower * (levelPercent / 100)) + (bLevel * 15);
+  const staticPower = basePower + levelBonus;
+  const totalPower = applyBattleSwing(staticPower);
+
+  return {
+    team,
+    basePower,
+    levelBonus,
+    levelPercent,
+    staticPower,
+    totalPower,
+    battleLevel: bLevel,
+    avgRankIdx,
+  };
+}
+
+// ကစားသမား၏ Level နှင့် အကောင် Rank များအပေါ်မူတည်၍ Wild Enemy အဖွဲ့ ဖန်တီးခြင်း
+function generateWildEnemy(myStats) {
+  const difficulty = getSoloDifficulty(myStats.battleLevel, myStats.avgRankIdx);
+  const wildLevel = Math.max(1, myStats.battleLevel + difficulty.levelOffset);
+
+  const enemyTeam = myStats.team.map((playerAnimal) => {
+    const pRankIdx = getAnimalRankIndex(playerAnimal);
+    const roll = Math.random();
+
+    let eRankIdx = pRankIdx;
+    if (roll < difficulty.rankChances.lower) {
+      eRankIdx = Math.max(0, pRankIdx - 1);
+    } else if (roll >= difficulty.rankChances.lower + difficulty.rankChances.same) {
+      eRankIdx = Math.min(RANK_ORDER.length - 1, pRankIdx + 1);
+    }
+
+    const pool = ANIMALS_BY_RANK[eRankIdx]?.length ? ANIMALS_BY_RANK[eRankIdx] : ANIMALS;
+    return pool[Math.floor(Math.random() * pool.length)];
+  });
+
+  const basePower = enemyTeam.reduce((sum, a) => sum + getAnimalPower(a), 0);
+  const levelPercent = (wildLevel - 1) * 3;
+  const levelBonus = Math.floor(basePower * (levelPercent / 100)) + (wildLevel * 15);
+  const staticPower = Math.round((basePower + levelBonus) * difficulty.powerScale);
+  const totalPower = applyBattleSwing(staticPower);
+
+  return {
+    team: enemyTeam,
+    wildLevel,
+    difficulty,
+    basePower,
+    staticPower,
+    totalPower,
+  };
 }
 
 // Kteam / Kb select လုပ်ဆောင်ချက်
@@ -72,7 +234,7 @@ async function handleTeamCommand(message, args, user) {
     await user.save();
 
     const teamList = chosenAnimals
-      .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Power: \`${a.price.toLocaleString()}\``)
+      .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Battle Power: \`${getAnimalPower(a).toLocaleString()}\``)
       .join('\n');
 
     return message.reply(
@@ -91,8 +253,9 @@ async function handleTeamCommand(message, args, user) {
     );
   }
 
+  const soloDiff = getSoloDifficulty(stats.battleLevel, stats.avgRankIdx);
   const currentList = stats.team
-    .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Base Power: \`${a.price.toLocaleString()}\``)
+    .map((a, idx) => `${idx + 1}. ${a.emoji} **${a.name}** (\`${a.id}\`) — Power: \`${getAnimalPower(a).toLocaleString()}\``)
     .join('\n');
 
   const teamEmbed = new EmbedBuilder()
@@ -101,7 +264,9 @@ async function handleTeamCommand(message, args, user) {
     .setDescription(`**ပုံစံ:** 🎯 ကိုယ်တိုင်ရွေးထားသော အဖွဲ့\n\n${currentList}`)
     .addFields(
       { name: '💥 Base Power', value: `**${stats.basePower.toLocaleString()}**`, inline: true },
-      { name: `🔥 Level Bonus (+${stats.levelPercent}%)`, value: `**+${stats.levelBonus.toLocaleString()}**`, inline: true }
+      { name: `🔥 Level Bonus (+${stats.levelPercent}%)`, value: `**+${stats.levelBonus.toLocaleString()}**`, inline: true },
+      { name: '⚔️ စုစုပေါင်း Power', value: `**~${stats.staticPower.toLocaleString()}** *(±8%)*`, inline: true },
+      { name: '🔥 လက်ရှိ Solo အခက်အခဲ', value: `${soloDiff.label} *(Battle Lv.${stats.battleLevel} + အကောင် Rank)*`, inline: false }
     )
     .setFooter({ text: 'ပြောင်းရွေးရန်: Kteam <id1> [id2] [id3] | ပြန်ဖျက်ရန်: Kteam clear' });
 
@@ -117,7 +282,7 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Solo & PvP (Battle Level သီးသန့်တက်သည်)
+  // ၂။ တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် - Dynamic Solo & PvP (Battle Level သီးသန့်တက်သည်)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
@@ -288,35 +453,31 @@ module.exports = [
         return;
       }
 
-      // Solo Wild Battle
-      const enemyTeam = [
-        ANIMALS[Math.floor(Math.random() * 65)],
-        ANIMALS[Math.floor(Math.random() * 85)],
-        ANIMALS[Math.floor(Math.random() * ANIMALS.length)],
-      ];
-
-      const enemyPower = enemyTeam.reduce((sum, a) => sum + a.price, 0) + Math.floor(Math.random() * 200);
-      const enemyTeamText = enemyTeam.map((a) => `${a.emoji} ${a.name}`).join('\n');
+      // Dynamic Solo Wild Battle (Level + Team Rank ပေါ်မူတည်၍ အခက်အခဲ ပြောင်းလဲသည်)
+      const wild = generateWildEnemy(myStats);
+      const enemyTeamText = wild.team.map((a) => `${a.emoji} ${a.name}`).join('\n');
 
       const battleEmbed = new EmbedBuilder()
-        .setColor('#E67E22')
-        .setTitle(`⚔️ ${message.author.username} (Battle Lv.${myStats.battleLevel}) ၏ တိရစ္ဆာန်တိုက်ပွဲ`)
+        .setColor(wild.difficulty.color)
+        .setTitle(`⚔️ ${message.author.username} (Battle Lv.${myStats.battleLevel}) VS Wild Team (Lv.${wild.wildLevel})`)
+        .setDescription(`**အခက်အခဲ:** ${wild.difficulty.label}`)
         .addFields(
           { name: '🛡️ သင့်အဖွဲ့ (Your Team)', value: myTeamText, inline: true },
-          { name: '👹 ရန်သူ့အဖွဲ့ (Wild Team)', value: enemyTeamText, inline: true }
+          { name: `👹 ရန်သူ့အဖွဲ့ (Wild Lv.${wild.wildLevel})`, value: enemyTeamText, inline: true }
         )
         .setFooter({ text: 'တိုက်ခိုက်နေပါသည်...' });
 
       const msg = await message.reply({ embeds: [battleEmbed] });
       await sleep(1500);
 
-      if (myStats.totalPower >= enemyPower) {
-        const gainedExp = Math.floor(Math.random() * 31) + 30;
+      if (myStats.totalPower >= wild.totalPower) {
+        const baseExp = Math.floor(Math.random() * 26) + 30;
+        const gainedExp = baseExp + wild.difficulty.bonusExp;
         const isBattleLevelUp = addBattleExp(user, gainedExp);
         updateQuestProgress(user, 'battleWin', 1);
 
         let crateDropText = '';
-        if (Math.random() < 0.15) {
+        if (Math.random() < wild.difficulty.crateChance) {
           user.boxes = (user.boxes || 0) + 1;
           crateDropText = '\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်!';
         }
@@ -324,19 +485,25 @@ module.exports = [
         await user.save();
 
         const bLevel = user.battleLevel || 1;
-        let winText = `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${enemyPower.toLocaleString()}\`)\n⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်! (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}`;
+        let winText =
+          `**အခက်အခဲ:** ${wild.difficulty.label}\n\n` +
+          `🎉 **အနိုင်ရရှိပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${wild.totalPower.toLocaleString()}\`)\n` +
+          `⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်! (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}`;
         if (isBattleLevelUp) {
           winText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
 
         battleEmbed.setColor('#2ECC71').setDescription(winText).setFooter({ text: 'တိုက်ပွဲ ပြီးဆုံးပါပြီ' });
       } else {
-        const loseExp = 5;
+        const loseExp = 8 + Math.floor(wild.difficulty.bonusExp / 5);
         const isBattleLevelUp = addBattleExp(user, loseExp);
         await user.save();
 
         const bLevel = user.battleLevel || 1;
-        let loseText = `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${enemyPower.toLocaleString()}\`)\n📖 **+${loseExp} Battle EXP** ရရှိပါတယ်။ (${user.battleExp}/${bLevel * 100} EXP)`;
+        let loseText =
+          `**အခက်အခဲ:** ${wild.difficulty.label}\n\n` +
+          `💀 **ရှုံးနိမ့်သွားပါတယ်!** (Power: \`${myStats.totalPower.toLocaleString()}\` vs \`${wild.totalPower.toLocaleString()}\`)\n` +
+          `📖 **+${loseExp} Battle EXP** ရရှိပါတယ်။ (${user.battleExp}/${bLevel * 100} EXP)`;
         if (isBattleLevelUp) {
           loseText += `\n🔥 **BATTLE LEVEL UP!** သင်သည် **Battle Level ${bLevel}** သို့ ရောက်ရှိသွားပါပြီ!`;
         }
