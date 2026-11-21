@@ -47,6 +47,8 @@ const userSchema = new mongoose.Schema({
   marriedToName: { type: String, default: null },
   marriedRing: { type: String, default: null },
   marriedAt: { type: Date, default: null },
+  // Animal Collection (Pokédex)
+  collectedAnimals: { type: [String], default: [] },
 
   // လက်ရှိ တပ်ဆင်အသုံးပြုနေသော Item များ နှင့် ကျန်ရှိအကြိမ်ရေ
   items: { type: [String], default: [] },

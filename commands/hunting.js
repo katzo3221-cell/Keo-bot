@@ -24,6 +24,26 @@ const RANKS = [
   { name: 'Celestial', emoji: '🌌' },
 ];
 
+const ANIMAL_NAME_TO_ID = new Map(ANIMALS.map((a) => [a.name, a.id]));
+const VALID_ANIMAL_IDS = new Set(ANIMALS.map((a) => a.id));
+
+// Pokédex Collection ထဲသို့ ဖမ်းမိဖူးသော တိရစ္ဆာန်များကို အလိုအလျောက် မှတ်တမ်းတင်ခြင်း
+function syncCollection(user) {
+  const set = new Set((user.collectedAnimals || []).filter((id) => VALID_ANIMAL_IDS.has(id)));
+  for (const [name, rawCount] of Object.entries(user.zoo || {})) {
+    if ((Number(rawCount) || 0) > 0 && ANIMAL_NAME_TO_ID.has(name)) {
+      set.add(ANIMAL_NAME_TO_ID.get(name));
+    }
+  }
+  const nextArr = Array.from(set);
+  if (nextArr.length !== (user.collectedAnimals || []).length) {
+    user.collectedAnimals = nextArr;
+    user.markModified('collectedAnimals');
+    return true;
+  }
+  return false;
+}
+
 // မြန်မာစံတော်ချိန် (UTC+6:30) ယနေ့ရက်စွဲ
 function getTodayMyanmarDate() {
   return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -205,6 +225,7 @@ module.exports = [
       }
 
       user.markModified('zoo');
+      syncCollection(user);
 
       const caughtListText = Object.values(caughtSummary)
         .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}**${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
@@ -258,7 +279,7 @@ module.exports = [
     },
   },
 
- // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
+  // ၂။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
   {
     names: ['zoo', 'z', 'zooid'],
     async execute(message, args, user, commandName) {
@@ -418,6 +439,7 @@ module.exports = [
       });
     },
   },
+
   // ၃။ တိရစ္ဆာန် ရောင်းချခြင်း (Ksell all / Ksell <id> [count/all] / Ksell <rank>)
   {
     names: ['sell', 'sellall'],
@@ -426,6 +448,9 @@ module.exports = [
       if (entries.length === 0) {
         return message.reply('❌ ရောင်းစရာ တိရစ္ဆာန် တစ်ကောင်မှ မရှိပါဘူး။');
       }
+
+      // မရောင်းခင် လက်ရှိပိုင်ဆိုင်ထားသော အကောင်များကို Collection ထဲ အရင်သိမ်းထားခြင်း (Pokédex)
+      syncCollection(user);
 
       const firstArg = args[0]?.toLowerCase();
 
@@ -723,6 +748,7 @@ module.exports = [
         levelUpText = expRes.levelUpText;
       }
 
+      syncCollection(user);
       await user.save();
 
       const rewardLines = [];
@@ -759,6 +785,113 @@ module.exports = [
         `${bodyText}${levelUpText}\n` +
         `*(ကျန်ရှိသော Lucky Crate: **${user.boxes} လုံး**)*`
       );
+    },
+  },
+
+  // ၅။ တိရစ္ဆာန် Collection စာရင်း ကြည့်ရှုခြင်း (Kcol / Kcollection [@user] [rank])
+  {
+    names: ['col', 'collection'],
+    async execute(message, args, user) {
+      const targetDiscordUser = message.mentions.users.first() || message.author;
+      if (targetDiscordUser.bot) {
+        return message.reply('❌ Bot များ၏ Collection ကို ကြည့်၍ မရပါ!');
+      }
+
+      const targetUser =
+        targetDiscordUser.id === message.author.id
+          ? user
+          : await getUser(targetDiscordUser.id, targetDiscordUser.username);
+
+      if (syncCollection(targetUser)) {
+        await targetUser.save();
+      }
+
+      const collectedSet = new Set(targetUser.collectedAnimals || []);
+      const collectedCount = collectedSet.size;
+      const totalCount = ANIMALS.length;
+      const percent = Math.floor((collectedCount / totalCount) * 100);
+      const barFilled = Math.min(10, Math.floor((collectedCount / totalCount) * 10));
+      const progressBar = '🟩'.repeat(barFilled) + '⬜'.repeat(10 - barFilled);
+
+      // Rank အလိုက် အသေးစိတ် ကြည့်ရှုခြင်း (ဥပမာ - Kcol celestial)
+      const rankQuery = args.find((a) => !a.startsWith('<@'))?.toLowerCase();
+      if (rankQuery) {
+        const matchedRank = RANKS.find(
+          (r) =>
+            r.name.toLowerCase() === rankQuery ||
+            r.name.toLowerCase().replace(/\s+/g, '') === rankQuery
+        );
+
+        if (!matchedRank) {
+          const validRanks = RANKS.map((r) => `\`${r.name.toLowerCase().replace(/\s+/g, '')}\``).join(', ');
+          return message.reply(`❌ Rank နာမည် မမှန်ပါ! ကြည့်နိုင်သော Rank များ: ${validRanks}`);
+        }
+
+        const rankTag = `(${matchedRank.name})`;
+        const rankAnimals = ANIMALS.filter((a) => a.name.endsWith(rankTag));
+        const rankUnlocked = rankAnimals.filter((a) => collectedSet.has(a.id)).length;
+
+        const detailLines = rankAnimals.map((a) => {
+          const cleanName = a.name.replace(/\s*\([^)]+\)\s*$/, '');
+          return collectedSet.has(a.id)
+            ? `✅ ${a.emoji} **${cleanName}**`
+            : `⬛ ❓ *${cleanName} (မမိသေး)*`;
+        });
+
+        const detailEmbed = new EmbedBuilder()
+          .setColor('#9B59B6')
+          .setAuthor({
+            name: `${targetDiscordUser.username} ၏ Collection — ${matchedRank.name}`,
+            iconURL: targetDiscordUser.displayAvatarURL(),
+          })
+          .setDescription(
+            `${matchedRank.emoji} **${matchedRank.name}** — **${rankUnlocked} / ${rankAnimals.length}**\n\n` +
+            detailLines.join('\n')
+          )
+          .setFooter({ text: 'အားလုံးပြန်ကြည့်ရန်: Kcol' });
+
+        return message.reply({ embeds: [detailEmbed] });
+      }
+
+      // Rank ၁၀ ဆင့်လုံး ခြုံငုံပြသခြင်း (Kcol)
+      const SHORT_RANK_LABELS = {
+        Common: 'Common',
+        Uncommon: 'Uncommon',
+        Rare: 'Rare',
+        'Super Rare': 'S.Rare',
+        Epic: 'Epic',
+        'Ultra Epic': 'U.Epic',
+        Legendary: 'Legend',
+        Mythical: 'Mythic',
+        Divine: 'Divine',
+        Celestial: 'Celestial',
+      };
+
+      const lines = RANKS.map((rankInfo) => {
+        const rankTag = `(${rankInfo.name})`;
+        const rankAnimals = ANIMALS.filter((a) => a.name.endsWith(rankTag));
+        const unlocked = rankAnimals.filter((a) => collectedSet.has(a.id)).length;
+        const icons = rankAnimals
+          .map((a) => (collectedSet.has(a.id) ? a.emoji : '⬛'))
+          .join(' ');
+        const label = SHORT_RANK_LABELS[rankInfo.name] || rankInfo.name;
+        return `${rankInfo.emoji} **${label}** \`${unlocked}/${rankAnimals.length}\` ➔ ${icons}`;
+      });
+
+      const colEmbed = new EmbedBuilder()
+        .setColor('#9B59B6')
+        .setAuthor({
+          name: `${targetDiscordUser.username} ၏ Animal Collection (Pokédex)`,
+          iconURL: targetDiscordUser.displayAvatarURL(),
+        })
+        .setDescription(
+          `📖 **Collection: ${collectedCount} / ${totalCount} (${percent}%)**\n` +
+          `${progressBar}\n\n` +
+          lines.join('\n')
+        )
+        .setFooter({ text: 'အသေးစိတ်ကြည့်ရန်: Kcol <rank> (ဥပမာ - Kcol celestial) | အခြားသူကြည့်ရန်: Kcol @user' });
+
+      return message.reply({ embeds: [colEmbed] });
     },
   },
 ];
