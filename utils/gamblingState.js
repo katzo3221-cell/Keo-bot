@@ -1,40 +1,68 @@
-const activeGambling = new Set();
 const MAX_BET = 250000;
+
+// တစ်ချိန်တည်း လောင်းကစားပွဲ ထပ်မဆော့နိုင်ရန် ထိန်းချုပ်မည့် Set
+const activeGambling = new Set();
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// လောင်းကြေးပမာဏ တွက်ထုတ်ခြင်း (all သို့မဟုတ် ဂဏန်း)
+// လောင်းကြေး ဖတ်ယူခြင်း (all ရိုက်ပါက Max Bet 250,000 အထိသာ ယူမည်)
 function parseBet(rawArg, balance) {
   if (!rawArg) return NaN;
-  if (rawArg.toLowerCase() === 'all') {
-    return Math.min(balance, MAX_BET);
+  const cleaned = String(rawArg).replace(/,/g, '').trim().toLowerCase();
+  if (cleaned === 'all') {
+    return Math.min(Math.floor(balance), MAX_BET);
   }
-  const num = parseInt(rawArg, 10);
-  if (isNaN(num)) return NaN;
-  return Math.min(num, MAX_BET);
+  if (!/^\d+$/.test(cleaned)) return NaN;
+  return parseInt(cleaned, 10);
 }
 
-// Command တွင် Mention (@user) နှင့် လောင်းကြေး ရှေ့နောက် ဘယ်လိုရိုက်ရိုက် ဖတ်ပေးခြင်း
-// ဥပမာ: Kbj @user 1000 သို့မဟုတ် Kbj 1000 @user
+// လောင်းကြေး စစ်ဆေးခြင်း (Max Bet 250,000 နှင့် လက်ကျန်ငွေ အပါအဝင်)
+function validateBet(rawArg, balance, usageExample) {
+  if (!rawArg) {
+    return { bet: null, error: `❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (${usageExample})` };
+  }
+
+  const cleaned = String(rawArg).replace(/,/g, '').trim().toLowerCase();
+  if (cleaned === 'all' && balance <= 0) {
+    return { bet: null, error: '❌ လက်ကျန်ငွေ မလုံလောက်ပါ!' };
+  }
+
+  const bet = parseBet(rawArg, balance);
+  if (isNaN(bet) || bet <= 0) {
+    return { bet: null, error: `❌ လောင်းကြေးပမာဏ မှန်ကန်စွာ ထည့်ပါ။ (${usageExample})` };
+  }
+  if (bet > MAX_BET) {
+    return {
+      bet: null,
+      error: `❌ တစ်ပွဲလျှင် အများဆုံး **${MAX_BET.toLocaleString()} coins** အထိသာ လောင်းနိုင်ပါတယ်!`,
+    };
+  }
+  if (bet > balance) {
+    return { bet: null, error: '❌ လက်ကျန်ငွေ မလုံလောက်ပါ!' };
+  }
+
+  return { bet, error: null };
+}
+
+// Mention ခေါ်ထားသော ပြိုင်ဘက်နှင့် လောင်းကြေး ခွဲထုတ်ခြင်း
 function extractBetAndOpponent(message, args) {
   const opponent = message.mentions.users.first() || null;
-  const nonMentionArgs = args.filter((a) => !/^<@!?\d+>$/.test(a));
-  return {
-    opponent,
-    betArg: nonMentionArgs[0],
-    extraArgs: nonMentionArgs.slice(1),
-  };
+  const betArg = args.find((a) => !a.startsWith('<@')) || null;
+  return { opponent, betArg };
 }
 
-// ၅၂ ချပ် ဖဲထုပ်အသစ် မွှေပေးခြင်း
+// ၅၂ ချပ် ဖဲထုပ် အသစ်မွှေခြင်း (Fisher-Yates Shuffle)
 function createShuffledDeck() {
   const suits = ['♠️', '♥️', '♦️', '♣️'];
   const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   const deck = [];
+
   for (const suit of suits) {
     for (const rank of ranks) {
-      deck.push({ suit, rank });
+      deck.push({ rank, suit });
     }
   }
+
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -42,19 +70,19 @@ function createShuffledDeck() {
   return deck;
 }
 
-// ဖဲချပ်များကို စာသားပုံစံ ပြောင်းခြင်း
-function formatHand(hand, hideSecond = false) {
-  if (hideSecond) {
-    return `\`[ ${hand[0].rank}${hand[0].suit} ]\` \`[ ❓ ]\``;
-  }
-  return hand.map((c) => `\`[ ${c.rank}${c.suit} ]\``).join(' ');
+// ဖဲချပ်များကို စာသားပုံစံ ဖော်ပြခြင်း
+function formatHand(hand, hideRest = false) {
+  return hand
+    .map((card, idx) => (hideRest && idx > 0 ? '`[ ❓ ]`' : `\`[ ${card.rank}${card.suit} ]\``))
+    .join(' ');
 }
 
 module.exports = {
-  activeGambling,
   MAX_BET,
+  activeGambling,
   sleep,
   parseBet,
+  validateBet,
   extractBetAndOpponent,
   createShuffledDeck,
   formatHand,

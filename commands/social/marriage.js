@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getUser } = require('../models/User');
-const { RINGS, findRing } = require('../data/rings');
+const { getUser } = require('../../models/User');
+const { RINGS, findRing } = require('../../data/rings');
 
 // တစ်ချိန်တည်း လက်ထပ်ခွင့်တောင်းမှု ထပ်မဖြစ်စေရန် ထိန်းချုပ်ခြင်း
 const pendingProposals = new Set();
@@ -33,7 +33,6 @@ module.exports = [
         return message.reply('❌ လက်စွပ် ID မမှန်ပါ! (`ring1`, `ring2`, `ring3`, `ring4`, `ring5` ထဲမှ တစ်ခုထည့်ပါ)');
       }
 
-      // Inventory ထဲတွင် လက်စွပ်ရှိမရှိ စစ်ဆေးခြင်း
       const ownedCount = Number((user.rings && user.rings[ring.id]) || 0);
       if (ownedCount < 1) {
         return message.reply(
@@ -106,88 +105,114 @@ module.exports = [
         });
 
         const collector = proposalMsg.createMessageComponentCollector({ time: 60000 });
+        let handled = false;
 
         collector.on('collect', async (i) => {
-          if (i.user.id !== target.id) {
-            return i.reply({ content: '❌ ဒီလက်ထပ်ခွင့်တောင်းဆိုမှုက သင့်အတွက် မဟုတ်ပါဘူး!', ephemeral: true });
-          }
+          try {
+            if (i.user.id !== target.id) {
+              return i.reply({ content: '❌ ဒီလက်ထပ်ခွင့်တောင်းဆိုမှုက သင့်အတွက် မဟုတ်ပါဘူး!', ephemeral: true });
+            }
+            if (handled) return;
+            handled = true;
 
-          if (i.customId === 'marry_reject') {
-            collector.stop('rejected');
-            const rejectEmbed = new EmbedBuilder()
-              .setColor('#E74C3C')
-              .setTitle('💔 ငြင်းပယ်လိုက်ပါပြီ')
-              .setDescription(
-                `**${target.username}** က **${message.author.username}** ၏ တောင်းဆိုမှုကို ငြင်းပယ်လိုက်ပါပြီ။\n*(${ring.emoji} **${ring.name}** သည် Inventory ထဲတွင် ပြန်ကျန်နေပါသည်)*`
-              );
-            return i.update({ content: '', embeds: [rejectEmbed], components: [] });
-          }
-
-          if (i.customId === 'marry_accept') {
-            collector.stop('accepted');
-
-            // Race condition ကာကွယ်ရန် Database မှ နောက်ဆုံး Data ပြန်စစ်ခြင်း
-            const freshProposer = await getUser(message.author.id, message.author.username);
-            const freshTarget = await getUser(target.id, target.username);
-
-            const freshOwned = Number((freshProposer.rings && freshProposer.rings[ring.id]) || 0);
-            if (freshOwned < 1) {
-              const errEmbed = new EmbedBuilder()
+            if (i.customId === 'marry_reject') {
+              collector.stop('rejected');
+              const rejectEmbed = new EmbedBuilder()
                 .setColor('#E74C3C')
-                .setDescription(`❌ **${message.author.username}** ၏ Inventory ထဲတွင် ${ring.emoji} **${ring.name}** မရှိတော့ပါ!`);
-              return i.update({ content: '', embeds: [errEmbed], components: [] });
+                .setTitle('💔 ငြင်းပယ်လိုက်ပါပြီ')
+                .setDescription(
+                  `**${target.username}** က **${message.author.username}** ၏ တောင်းဆိုမှုကို ငြင်းပယ်လိုက်ပါပြီ။\n*(${ring.emoji} **${ring.name}** သည် Inventory ထဲတွင် ပြန်ကျန်နေပါသည်)*`
+                );
+              return i.update({ content: '', embeds: [rejectEmbed], components: [] });
             }
 
-            const freshIsUpgrade =
-              freshProposer.marriedTo === target.id && freshTarget.marriedTo === message.author.id;
+            if (i.customId === 'marry_accept') {
+              collector.stop('accepted');
 
-            if (!freshIsUpgrade && (freshProposer.marriedTo || freshTarget.marriedTo)) {
-              const errEmbed = new EmbedBuilder()
-                .setColor('#E74C3C')
-                .setDescription('❌ ကစားသမားတစ်ဦးသည် လက်ထပ်ပြီးသား ဖြစ်သွားသဖြင့် လုပ်ဆောင်ချက် ပျက်ပြယ်သွားပါပြီ။');
-              return i.update({ content: '', embeds: [errEmbed], components: [] });
+              const freshProposer = await getUser(message.author.id, message.author.username);
+              const freshTarget = await getUser(target.id, target.username);
+
+              const freshOwned = Number((freshProposer.rings && freshProposer.rings[ring.id]) || 0);
+              if (freshOwned < 1) {
+                const errEmbed = new EmbedBuilder()
+                  .setColor('#E74C3C')
+                  .setDescription(`❌ **${message.author.username}** ၏ Inventory ထဲတွင် ${ring.emoji} **${ring.name}** မရှိတော့ပါ!`);
+                return i.update({ content: '', embeds: [errEmbed], components: [] });
+              }
+
+              const freshIsUpgrade =
+                freshProposer.marriedTo === target.id && freshTarget.marriedTo === message.author.id;
+
+              if (!freshIsUpgrade && (freshProposer.marriedTo || freshTarget.marriedTo)) {
+                const errEmbed = new EmbedBuilder()
+                  .setColor('#E74C3C')
+                  .setDescription('❌ ကစားသမားတစ်ဦးသည် လက်ထပ်ပြီးသား ဖြစ်သွားသဖြင့် လုပ်ဆောင်ချက် ပျက်ပြယ်သွားပါပြီ။');
+                return i.update({ content: '', embeds: [errEmbed], components: [] });
+              }
+
+              // Rollback အတွက် မူလအခြေအနေ မှတ်ထားခြင်း
+              const prevProposerState = {
+                marriedTo: freshProposer.marriedTo,
+                marriedToName: freshProposer.marriedToName,
+                marriedRing: freshProposer.marriedRing,
+                marriedAt: freshProposer.marriedAt,
+                ringCount: freshOwned,
+              };
+
+              freshProposer.rings = freshProposer.rings || {};
+              const remaining = freshOwned - 1;
+              if (remaining > 0) {
+                freshProposer.rings[ring.id] = remaining;
+              } else {
+                delete freshProposer.rings[ring.id];
+              }
+              freshProposer.markModified('rings');
+
+              const marriedDate =
+                freshIsUpgrade && freshProposer.marriedAt ? freshProposer.marriedAt : new Date();
+
+              freshProposer.marriedTo = target.id;
+              freshProposer.marriedToName = target.username;
+              freshProposer.marriedRing = ring.id;
+              freshProposer.marriedAt = marriedDate;
+
+              freshTarget.marriedTo = message.author.id;
+              freshTarget.marriedToName = message.author.username;
+              freshTarget.marriedRing = ring.id;
+              freshTarget.marriedAt = marriedDate;
+
+              await freshProposer.save();
+              try {
+                await freshTarget.save();
+              } catch (saveErr) {
+                // တစ်ဖက် Save မအောင်မြင်ပါက မူလအတိုင်း ပြန်ပြင်ခြင်း
+                freshProposer.marriedTo = prevProposerState.marriedTo;
+                freshProposer.marriedToName = prevProposerState.marriedToName;
+                freshProposer.marriedRing = prevProposerState.marriedRing;
+                freshProposer.marriedAt = prevProposerState.marriedAt;
+                freshProposer.rings[ring.id] = prevProposerState.ringCount;
+                freshProposer.markModified('rings');
+                await freshProposer.save().catch(() => {});
+                throw saveErr;
+              }
+
+              const successEmbed = new EmbedBuilder()
+                .setColor(ring.color)
+                .setTitle(
+                  freshIsUpgrade
+                    ? '✨ လက်စွပ် Upgrade အောင်မြင်ပါပြီ!'
+                    : '🎊 ဂုဏ်ယူပါတယ်! လက်ထပ်ပွဲ အောင်မြင်ပါပြီ!'
+                )
+                .setDescription(
+                  freshIsUpgrade
+                    ? `<@${message.author.id}> နှင့် <@${target.id}> တို့၏ လက်စွပ်သည် ${ring.emoji} **${ring.name}** (${ring.mmName}) သို့ အဆင့်တက်သွားပါပြီ!\n🎨 \`Kprofile\` ဘေးဘောင်အရောင်လည်း ပြောင်းလဲသွားပါပြီ!`
+                    : `<@${message.author.id}> နှင့် <@${target.id}> တို့သည် ${ring.emoji} **${ring.name}** (${ring.mmName}) ဖြင့် တရားဝင် လက်ထပ်လိုက်ကြပါပြီ!\n🎨 နှစ်ဦးလုံး၏ \`Kprofile\` တွင် လက်စွပ်နှင့် အထူး Border Color ပေါ်နေပါပြီ!`
+                );
+
+              return i.update({ content: '', embeds: [successEmbed], components: [] });
             }
-
-            // Inventory ထဲမှ လက်စွပ် ၁ ကွင်း နုတ်ယူခြင်း
-            freshProposer.rings = freshProposer.rings || {};
-            const remaining = freshOwned - 1;
-            if (remaining > 0) {
-              freshProposer.rings[ring.id] = remaining;
-            } else {
-              delete freshProposer.rings[ring.id];
-            }
-            freshProposer.markModified('rings');
-
-            const marriedDate =
-              freshIsUpgrade && freshProposer.marriedAt ? freshProposer.marriedAt : new Date();
-
-            freshProposer.marriedTo = target.id;
-            freshProposer.marriedToName = target.username;
-            freshProposer.marriedRing = ring.id;
-            freshProposer.marriedAt = marriedDate;
-
-            freshTarget.marriedTo = message.author.id;
-            freshTarget.marriedToName = message.author.username;
-            freshTarget.marriedRing = ring.id;
-            freshTarget.marriedAt = marriedDate;
-
-            await freshProposer.save();
-            await freshTarget.save();
-
-            const successEmbed = new EmbedBuilder()
-              .setColor(ring.color)
-              .setTitle(
-                freshIsUpgrade
-                  ? `✨ လက်စွပ် Upgrade အောင်မြင်ပါပြီ!`
-                  : `🎊 ဂုဏ်ယူပါတယ်! လက်ထပ်ပွဲ အောင်မြင်ပါပြီ!`
-              )
-              .setDescription(
-                freshIsUpgrade
-                  ? `<@${message.author.id}> နှင့် <@${target.id}> တို့၏ လက်စွပ်သည် ${ring.emoji} **${ring.name}** (${ring.mmName}) သို့ အဆင့်တက်သွားပါပြီ!\n🎨 \`Kprofile\` ဘေးဘောင်အရောင်လည်း ပြောင်းလဲသွားပါပြီ!`
-                  : `<@${message.author.id}> နှင့် <@${target.id}> တို့သည် ${ring.emoji} **${ring.name}** (${ring.mmName}) ဖြင့် တရားဝင် လက်ထပ်လိုက်ကြပါပြီ!\n🎨 နှစ်ဦးလုံး၏ \`Kprofile\` တွင် လက်စွပ်နှင့် အထူး Border Color ပေါ်နေပါပြီ!`
-              );
-
-            return i.update({ content: '', embeds: [successEmbed], components: [] });
+          } catch (err) {
+            console.error('Marry Collect Error:', err);
           }
         });
 
@@ -195,7 +220,7 @@ module.exports = [
           pendingProposals.delete(message.author.id);
           pendingProposals.delete(target.id);
 
-          if (reason === 'time') {
+          if (reason === 'time' && !handled) {
             const timeoutEmbed = new EmbedBuilder()
               .setColor('#95A5A6')
               .setDescription(
@@ -243,62 +268,69 @@ module.exports = [
 
       const msg = await message.reply({ embeds: [confirmEmbed], components: [row] });
       const collector = msg.createMessageComponentCollector({ time: 30000 });
+      let handled = false;
 
       collector.on('collect', async (i) => {
-        if (i.user.id !== message.author.id) {
-          return i.reply({ content: '❌ ဒါက သင့်ရဲ့ Command မဟုတ်ပါဘူး!', ephemeral: true });
-        }
+        try {
+          if (i.user.id !== message.author.id) {
+            return i.reply({ content: '❌ ဒါက သင့်ရဲ့ Command မဟုတ်ပါဘူး!', ephemeral: true });
+          }
+          if (handled) return;
+          handled = true;
 
-        if (i.customId === 'divorce_cancel') {
-          collector.stop('cancelled');
-          return i.update({
-            embeds: [new EmbedBuilder().setColor('#2ECC71').setDescription('✅ ကွာရှင်းခြင်းကို ပယ်ဖျက်လိုက်ပါပြီ။')],
-            components: [],
-          });
-        }
-
-        if (i.customId === 'divorce_confirm') {
-          collector.stop('confirmed');
-
-          const freshUser = await getUser(message.author.id, message.author.username);
-          if (!freshUser.marriedTo) {
+          if (i.customId === 'divorce_cancel') {
+            collector.stop('cancelled');
             return i.update({
-              embeds: [new EmbedBuilder().setColor('#95A5A6').setDescription('💔 သင်သည် ကွာရှင်းပြီးသား ဖြစ်နေပါသည်။')],
+              embeds: [new EmbedBuilder().setColor('#2ECC71').setDescription('✅ ကွာရှင်းခြင်းကို ပယ်ဖျက်လိုက်ပါပြီ။')],
               components: [],
             });
           }
 
-          const oldPartnerId = freshUser.marriedTo;
-          const partnerUser = await getUser(oldPartnerId, freshUser.marriedToName || 'Unknown');
+          if (i.customId === 'divorce_confirm') {
+            collector.stop('confirmed');
 
-          freshUser.marriedTo = null;
-          freshUser.marriedToName = null;
-          freshUser.marriedRing = null;
-          freshUser.marriedAt = null;
-          await freshUser.save();
+            const freshUser = await getUser(message.author.id, message.author.username);
+            if (!freshUser.marriedTo) {
+              return i.update({
+                embeds: [new EmbedBuilder().setColor('#95A5A6').setDescription('💔 သင်သည် ကွာရှင်းပြီးသား ဖြစ်နေပါသည်။')],
+                components: [],
+              });
+            }
 
-          if (partnerUser.marriedTo === message.author.id) {
-            partnerUser.marriedTo = null;
-            partnerUser.marriedToName = null;
-            partnerUser.marriedRing = null;
-            partnerUser.marriedAt = null;
-            await partnerUser.save();
+            const oldPartnerId = freshUser.marriedTo;
+            const partnerUser = await getUser(oldPartnerId, freshUser.marriedToName || 'Unknown');
+
+            freshUser.marriedTo = null;
+            freshUser.marriedToName = null;
+            freshUser.marriedRing = null;
+            freshUser.marriedAt = null;
+            await freshUser.save();
+
+            if (partnerUser.marriedTo === message.author.id) {
+              partnerUser.marriedTo = null;
+              partnerUser.marriedToName = null;
+              partnerUser.marriedRing = null;
+              partnerUser.marriedAt = null;
+              await partnerUser.save();
+            }
+
+            return i.update({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor('#95A5A6')
+                  .setTitle('💔 ကွာရှင်းပြီးစီးပါပြီ')
+                  .setDescription(`<@${message.author.id}> နှင့် <@${oldPartnerId}> တို့သည် တရားဝင် ကွာရှင်းလိုက်ကြပါပြီ။`),
+              ],
+              components: [],
+            });
           }
-
-          return i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor('#95A5A6')
-                .setTitle('💔 ကွာရှင်းပြီးစီးပါပြီ')
-                .setDescription(`<@${message.author.id}> နှင့် <@${oldPartnerId}> တို့သည် တရားဝင် ကွာရှင်းလိုက်ကြပါပြီ။`),
-            ],
-            components: [],
-          });
+        } catch (err) {
+          console.error('Divorce Collect Error:', err);
         }
       });
 
       collector.on('end', async (_, reason) => {
-        if (reason === 'time') {
+        if (reason === 'time' && !handled) {
           await msg.edit({ components: [] }).catch(() => {});
         }
       });

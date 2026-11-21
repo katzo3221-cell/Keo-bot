@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const ACTIONS = require('../data/actions');
+const ACTIONS = require('../../data/actions');
 
 module.exports = [
   {
@@ -24,12 +24,14 @@ module.exports = [
 
       const totalCount = user.actions[pairKey];
 
-      // nekos.best နှင့် waifu.pics API များမှ Anime GIF လှမ်းယူခြင်း
+      // nekos.best နှင့် waifu.pics API များမှ Anime GIF လှမ်းယူခြင်း (5s Timeout)
       let gifUrl = actionData.fallbackGif;
       try {
         let fetched = false;
         if (actionData.nekos) {
-          const res = await fetch(`https://nekos.best/api/v2/${actionData.nekos}`);
+          const res = await fetch(`https://nekos.best/api/v2/${actionData.nekos}`, {
+            signal: AbortSignal.timeout(5000),
+          });
           if (res.ok) {
             const data = await res.json();
             if (data?.results?.[0]?.url) {
@@ -39,14 +41,16 @@ module.exports = [
           }
         }
         if (!fetched && actionData.waifu) {
-          const res = await fetch(`https://api.waifu.pics/sfw/${actionData.waifu}`);
+          const res = await fetch(`https://api.waifu.pics/sfw/${actionData.waifu}`, {
+            signal: AbortSignal.timeout(5000),
+          });
           if (res.ok) {
             const data = await res.json();
             if (data?.url) gifUrl = data.url;
           }
         }
       } catch (apiErr) {
-        console.error('Action GIF Fetch Error:', apiErr);
+        console.error('Action GIF Fetch Error:', apiErr.message || apiErr);
       }
 
       const actionEmbed = new EmbedBuilder()

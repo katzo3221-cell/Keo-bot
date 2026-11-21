@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
-const { User, getUser } = require('../models/User');
-const { isOwner } = require('../utils/helpers');
+const { User, getUser } = require('../../models/User');
+const { isOwner } = require('../../utils/helpers');
 
 module.exports = [
   // ၁။ ကစားသမားထံ Coins ထည့်ပေးခြင်း (Kaddcoin @user <amount>)
