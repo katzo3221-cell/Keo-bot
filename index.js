@@ -15,22 +15,44 @@ const client = new Client({
   ],
 });
 
-// Anti-Spam Cooldown Map (Command တစ်ခုချင်းစီအလိုက် ခွဲမှတ်မည်)
+// Anti-Spam Cooldown Map (Command တစ်ခုချင်းစီအလိုက်)
 const cooldowns = new Map();
 
-// commands/ ဖိုဒါထဲမှ Command ဖိုင်အားလုံးကို အလိုအလျောက် ဖတ်ယူခြင်း
+// Race Condition ကာကွယ်ရန် User တစ်ဦးလျှင် တစ်ချိန်တည်း Command တစ်ခုသာ လုပ်ဆောင်ခွင့် Lock
+const processingUsers = new Set();
+
+// ကြည့်ရုံသက်သက် Command များအတွက် ၃ စက္ကန့် Cooldown (ကျန် Command များ ၆ စက္ကန့်)
+const FAST_COMMANDS = new Set([
+  'cash', 'bal', 'zoo', 'z', 'zooid', 'inv', 'inventory', 'bag',
+  'profile', 'p', 'lvl', 'level', 'cd', 'cooldown', 'cooldowns', 'limits',
+  'quest', 'quests', 'q', 'col', 'collection', 'shop', 'top', 'lb',
+  'help', 'avater', 'avatar', 'av', 'pfp', 'team', 'select', 'botstats', 'stats',
+]);
+
+// commands/ နှင့် Subfolder များထဲမှ .js ဖိုင်အားလုံးကို အလိုအလျောက် ဖတ်ယူခြင်း
 const commandMap = new Map();
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-  const fileCommands = require(path.join(commandsPath, file));
-  for (const cmd of fileCommands) {
-    for (const name of cmd.names) {
-      commandMap.set(name.toLowerCase(), cmd);
+function loadCommandsFromDir(dirPath) {
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      loadCommandsFromDir(fullPath);
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      const fileCommands = require(fullPath);
+      if (!Array.isArray(fileCommands)) continue;
+      for (const cmd of fileCommands) {
+        if (!cmd || !Array.isArray(cmd.names)) continue;
+        for (const name of cmd.names) {
+          commandMap.set(name.toLowerCase(), cmd);
+        }
+      }
     }
   }
 }
+
+loadCommandsFromDir(commandsPath);
 
 // MongoDB Cloud Database ချိတ်ဆက်ခြင်း
 mongoose.connect(process.env.MONGO_URI)
@@ -51,10 +73,22 @@ client.on('messageCreate', async (message) => {
   const commandObj = commandMap.get(commandName);
   if (!commandObj) return;
 
-  // တူညီသော Command တစ်ခုတည်းကို ဆက်တိုက်ရိုက်မှသာ ၈ စက္ကန့် Cooldown စစ်ဆေးခြင်း
+  // တစ်ပြိုင်တည်း Command ၂ ခု ပြိုင်နှိပ်ခြင်းမှ ကာကွယ်ခြင်း
+  if (processingUsers.has(message.author.id)) {
+    return message.reply('⏳ အရင် Command ကို လုပ်ဆောင်နေဆဲဖြစ်လို့ ခဏစောင့်ပြီးမှ ပြန်ရိုက်ပါခင်ဗျာ။');
+  }
+
+  // Command အမျိုးအစားအလိုက် Cooldown စစ်ဆေးခြင်း
   const nowTime = Date.now();
-  const cooldownAmount = 8000;
-  const cooldownKey = `${message.author.id}_${commandObj.names[0]}`;
+  const baseName = commandObj.names[0].toLowerCase();
+  const cooldownAmount =
+    typeof commandObj.cooldown === 'number'
+      ? commandObj.cooldown
+      : FAST_COMMANDS.has(baseName) || FAST_COMMANDS.has(commandName)
+        ? 3000
+        : 6000;
+
+  const cooldownKey = `${message.author.id}_${baseName}`;
 
   if (cooldowns.has(cooldownKey)) {
     const userData = cooldowns.get(cooldownKey);
@@ -67,10 +101,10 @@ client.on('messageCreate', async (message) => {
       if (userData.spamCount === 1) {
         return message.reply(`⏳ ဖြည်းဖြည်းရိုက်ပါခင်ဗျာ! နောက်ထပ် **${timeLeft} စက္ကန့်** စောင့်ပြီးမှ ပြန်ရိုက်ပါ။`);
       } else if (userData.spamCount === 2) {
-        return message.reply('သေချင်းဆိုး ဖြည်းဖြည်းရိုက်ဟ');
-      } else {
-        return message.reply('သေချင်းဆိုး နားလေးနေလား');
+        return message.reply(`⏳ ခဏလေး စောင့်ပေးပါဦးနော် (**${timeLeft}s** ကျန်ပါသေးတယ်)။`);
       }
+      // ၃ ကြိမ်နှင့်အထက် ဆက်တိုက် Spam ပါက Channel မရှုပ်အောင် တိတ်ဆိတ်စွာ လျစ်လျူရှုမည်
+      return;
     }
     clearTimeout(userData.timeoutId);
   }
@@ -78,6 +112,7 @@ client.on('messageCreate', async (message) => {
   const timeoutId = setTimeout(() => cooldowns.delete(cooldownKey), cooldownAmount);
   cooldowns.set(cooldownKey, { timestamp: nowTime, spamCount: 0, timeoutId });
 
+  processingUsers.add(message.author.id);
   try {
     const user = await getUser(message.author.id, message.author.username);
 
@@ -89,6 +124,9 @@ client.on('messageCreate', async (message) => {
     await commandObj.execute(message, args, user, commandName);
   } catch (err) {
     console.error(`Command Error (${commandName}):`, err);
+    await message.reply('⚠️ Command လုပ်ဆောင်ရာတွင် ယာယီအမှားတစ်ခု ဖြစ်ပွားသွားပါတယ်။ ခဏနေမှ ထပ်စမ်းကြည့်ပါ။').catch(() => {});
+  } finally {
+    processingUsers.delete(message.author.id);
   }
 });
 
