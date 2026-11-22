@@ -160,41 +160,6 @@ module.exports = [
               const rightTitle = `🔥 ${opponentMention.username} (Lv.${freshOppStats.battleLevel})`;
               const title = `⚔️ PvP: ${message.author.username} VS ${opponentMention.username}`;
 
-              const introEmbed = buildCombatEmbed({
-                color: '#F39C12',
-                title,
-                headerLine: `**${arena}** • ⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
-                logs: [],
-                leftTitle,
-                leftUnits: myUnits,
-                rightTitle,
-                rightUnits: oppUnits,
-                footerText: 'Turn 1 စတင်နေပါသည်...',
-              });
-
-              await i.update({ content: '', embeds: [introEmbed], components: [] });
-
-              // Turn အလိုက် Live Animation ပြသခြင်း
-              for (let idx = 0; idx < animFrames.length; idx++) {
-                await sleep(1300);
-                const frame = animFrames[idx];
-                const isLast = idx === animFrames.length - 1;
-                if (isLast) break;
-
-                const turnEmbed = buildCombatEmbed({
-                  color: '#F39C12',
-                  title,
-                  headerLine: `**${arena}** • 🔥 **Turn ${frame.turn}**`,
-                  logs: frame.logs,
-                  leftTitle,
-                  leftUnits: frame.teamA,
-                  rightTitle,
-                  rightUnits: frame.teamB,
-                  footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
-                });
-                await challengeMsg.edit({ embeds: [turnEmbed] }).catch(() => {});
-              }
-
               const finalFrame = sim.frames[sim.frames.length - 1];
               const p1Won = sim.winner === 'A';
               const gainedExp = Math.floor(Math.random() * 31) + 45;
@@ -240,6 +205,39 @@ module.exports = [
                   formatPvpLevelUp(message.author.username, freshUser, loseExpRes);
               }
 
+              const introEmbed = buildCombatEmbed({
+                color: '#F39C12',
+                title,
+                headerLine: `**${arena}** • ⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
+                logs: [],
+                leftTitle,
+                leftUnits: myUnits,
+                rightTitle,
+                rightUnits: oppUnits,
+                footerText: 'Turn 1 စတင်နေပါသည်...',
+              });
+
+              await i.update({ content: '', embeds: [introEmbed], components: [] });
+
+              for (let idx = 0; idx < animFrames.length; idx++) {
+                await sleep(1100);
+                const frame = animFrames[idx];
+                if (idx === animFrames.length - 1) break;
+
+                const turnEmbed = buildCombatEmbed({
+                  color: '#F39C12',
+                  title,
+                  headerLine: `**${arena}** • 🔥 **Turn ${frame.turn}**`,
+                  logs: frame.logs,
+                  leftTitle,
+                  leftUnits: frame.teamA,
+                  rightTitle,
+                  rightUnits: frame.teamB,
+                  footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
+                });
+                await challengeMsg.edit({ embeds: [turnEmbed] }).catch(() => {});
+              }
+
               const finalEmbed = buildCombatEmbed({
                 color: p1Won ? '#2ECC71' : '#E74C3C',
                 title,
@@ -279,6 +277,45 @@ module.exports = [
       const enemyUnits = buildBattleUnits(wild.team, wild.wildLevel, wild.difficulty.powerScale);
       const sim = simulateBattle(myUnits, enemyUnits);
       const animFrames = selectAnimationFrames(sim.frames);
+      const finalFrame = sim.frames[sim.frames.length - 1];
+      const playerWon = sim.winner === 'A';
+
+      // Animation မစခင် Database ထဲ ချက်ချင်း Save လုပ်ထားခြင်း (အခြား Command များ ဆက်တိုက်ရိုက်နိုင်ရန်)
+      let finalHeader = '';
+      let finalColor = '#E74C3C';
+      let finalFooter = `ရှုံးနိမ့်သွားပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`;
+
+      if (playerWon) {
+        const baseExp = Math.floor(Math.random() * 26) + 30;
+        const gainedExp = baseExp + wild.difficulty.bonusExp;
+        const expRes = addBattleExpReward(user, gainedExp);
+        updateQuestProgress(user, 'battleWin', 1);
+
+        const crateRes = tryDropBattleCrate(user, wild.difficulty.crateChance);
+        const crateDropText = crateRes.dropped
+          ? `\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်! *(ယနေ့ Limit: **${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT}**)*`
+          : '';
+
+        await user.save();
+
+        const bLevel = user.battleLevel || 1;
+        finalColor = '#2ECC71';
+        finalFooter = `အနိုင်ရရှိပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`;
+        finalHeader =
+          `**${arena}** • ${wild.difficulty.label}\n` +
+          `🏆 **${sim.totalTurns} ကျော့မြောက်တွင် အနိုင်ရရှိပါတယ်!**\n` +
+          `⚔️ **+${gainedExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}${expRes.levelUpText}`;
+      } else {
+        const loseExp = 8 + Math.floor(wild.difficulty.bonusExp / 5);
+        const expRes = addBattleExpReward(user, loseExp);
+        await user.save();
+
+        const bLevel = user.battleLevel || 1;
+        finalHeader =
+          `**${arena}** • ${wild.difficulty.label}\n` +
+          `💀 **${sim.totalTurns} ကျော့မြောက်တွင် ရှုံးနိမ့်သွားပါတယ်!**\n` +
+          `📖 **+${loseExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${expRes.levelUpText}`;
+      }
 
       const leftTitle = `🛡️ ${message.author.username} (Lv.${myStats.battleLevel})`;
       const rightTitle = `${enemySquad} (Lv.${wild.wildLevel})`;
@@ -298,87 +335,41 @@ module.exports = [
 
       const msg = await message.reply({ embeds: [startEmbed] });
 
-      // Turn အလိုက် Live Animation ပြသခြင်း
-      for (let idx = 0; idx < animFrames.length; idx++) {
-        await sleep(1300);
-        const frame = animFrames[idx];
-        const isLast = idx === animFrames.length - 1;
-        if (isLast) break;
+      // Animation ကို Background မှာ ဆက်ပြောင်းပြစေခြင်း (await မလုပ်သဖြင့် ချက်ချင်း Kh စသည် ရိုက်နိုင်မည်)
+      (async () => {
+        for (let idx = 0; idx < animFrames.length; idx++) {
+          await sleep(1100);
+          const frame = animFrames[idx];
+          if (idx === animFrames.length - 1) break;
 
-        const turnEmbed = buildCombatEmbed({
-          color: '#F39C12',
-          title,
-          headerLine: `**${arena}** • ${wild.difficulty.label} • 🔥 **Turn ${frame.turn}**`,
-          logs: frame.logs,
-          leftTitle,
-          leftUnits: frame.teamA,
-          rightTitle,
-          rightUnits: frame.teamB,
-          footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
-        });
-        await msg.edit({ embeds: [turnEmbed] }).catch(() => {});
-      }
-
-      const finalFrame = sim.frames[sim.frames.length - 1];
-      const playerWon = sim.winner === 'A';
-
-      if (playerWon) {
-        const baseExp = Math.floor(Math.random() * 26) + 30;
-        const gainedExp = baseExp + wild.difficulty.bonusExp;
-        const expRes = addBattleExpReward(user, gainedExp);
-        updateQuestProgress(user, 'battleWin', 1);
-
-        const crateRes = tryDropBattleCrate(user, wild.difficulty.crateChance);
-        const crateDropText = crateRes.dropped
-          ? `\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်! *(ယနေ့ Limit: **${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT}**)*`
-          : '';
-
-        await user.save();
-
-        const bLevel = user.battleLevel || 1;
-        const winHeader =
-          `**${arena}** • ${wild.difficulty.label}\n` +
-          `🏆 **${sim.totalTurns} ကျော့မြောက်တွင် အနိုင်ရရှိပါတယ်!**\n` +
-          `⚔️ **+${gainedExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}${expRes.levelUpText}`;
+          const turnEmbed = buildCombatEmbed({
+            color: '#F39C12',
+            title,
+            headerLine: `**${arena}** • ${wild.difficulty.label} • 🔥 **Turn ${frame.turn}**`,
+            logs: frame.logs,
+            leftTitle,
+            leftUnits: frame.teamA,
+            rightTitle,
+            rightUnits: frame.teamB,
+            footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
+          });
+          await msg.edit({ embeds: [turnEmbed] }).catch(() => {});
+        }
 
         const finalEmbed = buildCombatEmbed({
-          color: '#2ECC71',
+          color: finalColor,
           title,
-          headerLine: winHeader,
+          headerLine: finalHeader,
           logs: finalFrame.logs,
           leftTitle,
           leftUnits: finalFrame.teamA,
           rightTitle,
           rightUnits: finalFrame.teamB,
-          footerText: `အနိုင်ရရှိပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`,
+          footerText: finalFooter,
         });
 
-        return msg.edit({ embeds: [finalEmbed] }).catch(() => {});
-      } else {
-        const loseExp = 8 + Math.floor(wild.difficulty.bonusExp / 5);
-        const expRes = addBattleExpReward(user, loseExp);
-        await user.save();
-
-        const bLevel = user.battleLevel || 1;
-        const loseHeader =
-          `**${arena}** • ${wild.difficulty.label}\n` +
-          `💀 **${sim.totalTurns} ကျော့မြောက်တွင် ရှုံးနိမ့်သွားပါတယ်!**\n` +
-          `📖 **+${loseExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${expRes.levelUpText}`;
-
-        const finalEmbed = buildCombatEmbed({
-          color: '#E74C3C',
-          title,
-          headerLine: loseHeader,
-          logs: finalFrame.logs,
-          leftTitle,
-          leftUnits: finalFrame.teamA,
-          rightTitle,
-          rightUnits: finalFrame.teamB,
-          footerText: `ရှုံးနိမ့်သွားပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`,
-        });
-
-        return msg.edit({ embeds: [finalEmbed] }).catch(() => {});
-      }
+        await msg.edit({ embeds: [finalEmbed] }).catch(() => {});
+      })().catch((err) => console.error('Battle Animation Error:', err));
     },
   },
 ];
