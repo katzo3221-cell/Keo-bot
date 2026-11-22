@@ -33,10 +33,10 @@ function formatPvpLevelUp(username, userObj, expRes) {
   return `\n🔥 **BATTLE LEVEL UP!** **${username}** ➔ **Battle Lv.${userObj.battleLevel}** (+${expRes.rewardCoins.toLocaleString()} coins${crateNote})`;
 }
 
-// OwO စတိုင် သပ်ရပ်သော အဖွဲ့စာရင်း အကျဉ်း
+// OwO စတိုင် အကောင်နာမည်မပါဘဲ Emoji + Class အကျဉ်းသာ ပြသခြင်း
 function formatCompactRoster(units, level) {
   return units
-    .map((u) => `\`Lv.${level}\` ${u.rankEmoji}${u.emoji} **${u.shortName}** • ${u.cls.icon} *${u.cls.title}*`)
+    .map((u) => `\`Lv.${level}\` ${u.rankEmoji}${u.emoji} — ${u.cls.icon} *${u.cls.title}*`)
     .join('\n');
 }
 
@@ -70,7 +70,7 @@ function buildCardEmbed({
 }
 
 module.exports = [
-  // တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် — OwO Style Canvas RPG Card (Solo & PvP)
+  // တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် — OwO Style HD Canvas RPG Card (Solo & PvP)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
@@ -225,26 +225,25 @@ module.exports = [
                 color: '#F39C12',
                 authorName: `${message.author.username} VS ${opponentMention.username}`,
                 authorIcon: message.author.displayAvatarURL(),
-                description: `**${arena}** • ⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
+                description: `**${arena}**`,
                 leftTitle,
                 leftRoster,
                 rightTitle,
                 rightRoster,
                 imageFileName: 'pvp-start.png',
-                footerText: 'PvP တိုက်ပွဲ တိုက်ခိုက်နေပါသည်...',
+                footerText: '⚔️ PvP တိုက်ပွဲ တိုက်ခိုက်နေပါသည်...',
               });
 
               await i.update({ content: '', embeds: [startEmbed], components: [], files: [startFile] });
 
               await sleep(1300);
 
-              const highlightLog = finalFrame.logs[finalFrame.logs.length - 1] || '';
               const finalFile = new AttachmentBuilder(finalBuf, { name: 'pvp-final.png' });
               const finalEmbed = buildCardEmbed({
                 color: p1Won ? '#2ECC71' : '#E74C3C',
                 authorName: `${message.author.username} VS ${opponentMention.username}`,
                 authorIcon: message.author.displayAvatarURL(),
-                description: `**${arena}**${highlightLog ? `\n${highlightLog}` : ''}${bonusText}`,
+                description: `**${arena}**${bonusText}`,
                 leftTitle,
                 leftRoster,
                 rightTitle,
@@ -323,7 +322,6 @@ module.exports = [
       const leftRoster = formatCompactRoster(myUnits, myStats.battleLevel);
       const rightRoster = formatCompactRoster(enemyUnits, wild.wildLevel);
 
-      // Start Card နှင့် Final Card နှစ်ပုံလုံးကို တစ်ပြိုင်တည်း ကြိုဆွဲထားခြင်း
       const [startBuf, finalBuf] = await Promise.all([
         renderBattleCard(myUnits, enemyUnits),
         renderBattleCard(finalFrame.teamA, finalFrame.teamB),
@@ -345,17 +343,15 @@ module.exports = [
 
       const msg = await message.reply({ embeds: [startEmbed], files: [startFile] });
 
-      // Background မှာ ၁.၃ စက္ကန့်အကြာ Final Result Card ပြောင်းပြခြင်း (Kh စသည် ချက်ချင်းဆက်ရိုက်နိုင်မည်)
       (async () => {
         await sleep(1300);
 
-        const highlightLog = finalFrame.logs[finalFrame.logs.length - 1] || '';
         const finalFile = new AttachmentBuilder(finalBuf, { name: 'battle-final.png' });
         const finalEmbed = buildCardEmbed({
           color: finalColor,
           authorName: `${message.author.username} goes into battle!`,
           authorIcon: message.author.displayAvatarURL(),
-          description: `**${arena}** • ${wild.difficulty.label}${highlightLog ? `\n${highlightLog}` : ''}${bonusText}`,
+          description: `**${arena}** • ${wild.difficulty.label}${bonusText}`,
           leftTitle,
           leftRoster,
           rightTitle,
