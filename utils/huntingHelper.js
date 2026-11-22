@@ -1,5 +1,9 @@
 const ANIMALS = require('../data/animals');
 
+// Divine နှင့် Celestial အတွက် Animated Sparkle Emoji များ
+const DIVINE_SHINE = '<a:sparkle_gold:1573931275624906822>';
+const CELESTIAL_SHINE = '<a:sparkles_purple:1573931254338818098>';
+
 // Rank ၁၀ ဆင့်နှင့် Emoji အတိုလေးများ
 const RANKS = [
   { name: 'Common', emoji: '🟢' },
@@ -10,8 +14,8 @@ const RANKS = [
   { name: 'Ultra Epic', emoji: '🟡' },
   { name: 'Legendary', emoji: '🔴' },
   { name: 'Mythical', emoji: '🔮' },
-  { name: 'Divine', emoji: '✨' },
-  { name: 'Celestial', emoji: '🌌' },
+  { name: 'Divine', emoji: DIVINE_SHINE },
+  { name: 'Celestial', emoji: CELESTIAL_SHINE },
 ];
 
 const SHORT_RANK_LABELS = {
@@ -100,6 +104,8 @@ function syncBattleTeam(user) {
 }
 
 module.exports = {
+  DIVINE_SHINE,
+  CELESTIAL_SHINE,
   RANKS,
   SHORT_RANK_LABELS,
   getAnimalMeta,

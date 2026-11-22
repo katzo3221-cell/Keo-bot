@@ -9,7 +9,13 @@ const {
   consumeActiveHuntItems,
 } = require('../../data/shopItems');
 const { getTodayMyanmarDate } = require('../../utils/helpers');
-const { getAnimalMeta, syncCollection, syncZooStats } = require('../../utils/huntingHelper');
+const {
+  DIVINE_SHINE,
+  CELESTIAL_SHINE,
+  getAnimalMeta,
+  syncCollection,
+  syncZooStats,
+} = require('../../utils/huntingHelper');
 
 // Anti-Macro Verification (AMV) ခလုတ်စစ်ဆေးမှု ပေးပို့ခြင်း
 async function sendAmvChallenge(message) {
@@ -142,7 +148,7 @@ module.exports = [
           caughtSummary[caught.name] = {
             emoji: caught.emoji,
             id: caught.id,
-            shortName: meta.shortName,
+            rank: meta.rank,
             rankEmoji: meta.rankEmoji,
             count: 0,
           };
@@ -153,13 +159,34 @@ module.exports = [
       user.markModified('zoo');
       syncCollection(user);
       syncZooStats(user);
-
-      // Daily Hunt Quest Progress တိုးပေးခြင်း (Bug Fix)
       updateQuestProgress(user, 'hunt', 1);
 
+      let hasDivine = false;
+      let hasCelestial = false;
+
+      // Emoji သီးသန့် ပြသခြင်း (Divine နှင့် Celestial ကို Animated Sparkle ဖြင့် ထင်ရှားအောင် ဘောင်ခတ်မည်)
       const caughtListText = Object.values(caughtSummary)
-        .map((data) => `${data.rankEmoji} ${data.emoji} **${data.shortName}**${data.count > 1 ? ` × \`${data.count}\`` : ''}`)
-        .join('၊ ');
+        .map((data) => {
+          const qty = data.count > 1 ? `×${data.count}` : '';
+          if (data.rank === 'Celestial') {
+            hasCelestial = true;
+            return `${CELESTIAL_SHINE}『 ${data.emoji} 』${CELESTIAL_SHINE}${qty}`;
+          }
+          if (data.rank === 'Divine') {
+            hasDivine = true;
+            return `${DIVINE_SHINE}【 ${data.emoji} 】${DIVINE_SHINE}${qty}`;
+          }
+          return `${data.rankEmoji}${data.emoji}${qty}`;
+        })
+        .join(' ');
+
+      let rareBannerText = '';
+      if (hasCelestial) {
+        rareBannerText += `\n${CELESTIAL_SHINE} **CELESTIAL ဖမ်းမိပါပြီ!!** ${CELESTIAL_SHINE}`;
+      }
+      if (hasDivine) {
+        rareBannerText += `\n${DIVINE_SHINE} **DIVINE ဖမ်းမိပါပြီ!** ${DIVINE_SHINE}`;
+      }
 
       // တောထဲမှ Item ရှာတွေ့ခြင်း (တစ်ရက်လျှင် အများဆုံး ၃ ခု Limit)
       const todayStr = getTodayMyanmarDate();
@@ -182,13 +209,9 @@ module.exports = [
           `${statusNote} *(ယနေ့ Limit: **${user.dailyHuntItemCount}/3**)*`;
       }
 
-      // အသုံးပြုလိုက်သော Active Item များ၏ အကြိမ်ရေကို ၁ ကြိမ်စီ လျှော့ချခြင်း
       const brokenItemText = consumeActiveHuntItems(user, activeItems);
-
-      // Profile EXP +10 (Daily Limit 3,000)
       const expRes = addProfileExp(user, 10);
 
-      // အကြိမ် ၁၀၀ ပြည့်ပါက AMV စစ်ဆေးမှု ဖွင့်ပေးခြင်း
       user.huntCount = (user.huntCount || 0) + 1;
       let triggeredAmv = false;
       if (user.huntCount >= 100) {
@@ -200,7 +223,7 @@ module.exports = [
       await user.save();
 
       await message.reply(
-        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်!${foundItemText}${brokenItemText}${expRes.levelUpText}`
+        `🏹 သင်သည် တောထဲသို့ အမဲလိုက်ထွက်ရာ... ${caughtListText} ဖမ်းမိခဲ့ပါတယ်!${rareBannerText}${foundItemText}${brokenItemText}${expRes.levelUpText}`
       );
 
       if (triggeredAmv) {

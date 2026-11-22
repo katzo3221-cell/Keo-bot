@@ -104,20 +104,20 @@ const ANIMALS = [
   { id: 'lavadragon', name: 'မီးတောင်နဂါး (Divine)', emoji: '🌋', price: 30000, chance: 0.002 },
   { id: 'stormbird', name: 'လေမုန်တိုင်းငှက် (Divine)', emoji: '🌪️', price: 30000, chance: 0.002 },
   { id: 'goldunicorn', name: 'ရွှေရောင်ယူနီကွန်း (Divine)', emoji: '🌟', price: 30000, chance: 0.002 },
-  { id: 'divineelephant', name: 'နတ်ဘုရားဆင်ဖြူတော် (Divine)', emoji: '👑', price: 30000, chance: 0.002 },
+  { id: 'divineelephant', name: 'နတ်ဘုရားဆင်ဖြူတော် (Divine)', emoji: '⚜️', price: 30000, chance: 0.002 },
   { id: 'rainbowphoenix', name: 'သက်တံ့ဖီးနစ် (Divine)', emoji: '🌈', price: 30000, chance: 0.002 },
   { id: 'darkdragon', name: 'အမှောင်ထုနဂါး (Divine)', emoji: '🌑', price: 30000, chance: 0.002 },
 
   // 🌌 Rank 10: Celestial (စကြဝဠာအရှင် - စုစုပေါင်း 0.001% / ၁၀၀,၀၀၀ မှ ၁ ကောင် | ဈေးနှုန်း: 150,000 coins)
   { id: 'stardragon', name: 'ကြယ်တာရာနဂါး (Celestial)', emoji: '🌠', price: 150000, chance: 0.0001 },
-  { id: 'galaxyphoenix', name: 'ဂလက်ဆီဖီးနစ် (Celestial)', emoji: '🌌', price: 150000, chance: 0.0001 },
+  { id: 'galaxyphoenix', name: 'ဂလက်ဆီဖီးနစ် (Celestial)', emoji: '🎆', price: 150000, chance: 0.0001 },
   { id: 'timegod', name: 'အချိန်စောင့်နတ်မင်း (Celestial)', emoji: '⏳', price: 150000, chance: 0.0001 },
   { id: 'cosmiclion', name: 'စကြဝဠာခြင်္သေ့မင်း (Celestial)', emoji: '🪐', price: 150000, chance: 0.0001 },
   { id: 'infinitedragon', name: 'အနန္တနဂါးချုပ် (Celestial)', emoji: '♾️', price: 150000, chance: 0.0001 },
   { id: 'heavenlord', name: 'ကောင်းကင်ဘုံအရှင် (Celestial)', emoji: '🏯', price: 150000, chance: 0.0001 },
   { id: 'solarwhale', name: 'နေစကြဝဠာဝေလငါး (Celestial)', emoji: '☄️', price: 150000, chance: 0.0001 },
   { id: 'godking', name: 'နတ်ဘုရားဘုရင် (Celestial)', emoji: '🔱', price: 150000, chance: 0.0001 },
-  { id: 'primordialdragon', name: 'ကမ္ဘာဦးနဂါးမင်း (Celestial)', emoji: '🐉', price: 150000, chance: 0.0001 },
+  { id: 'primordialdragon', name: 'ကမ္ဘာဦးနဂါးမင်း (Celestial)', emoji: '💠', price: 150000, chance: 0.0001 },
   { id: 'celestiallord', name: 'စကြဝဠာအရှင်သခင် (Celestial)', emoji: '👑', price: 150000, chance: 0.0001 },
 ];
 
