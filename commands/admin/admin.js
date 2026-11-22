@@ -1,9 +1,11 @@
-const { EmbedBuilder } = require('discord.js');
-const { User, getUser } = require('../../models/User');
-const { isOwner } = require('../../utils/helpers');
+const { isOwner, findAnimal } = require('../../utils/helpers');
+const { resolveAdminTarget, parseAmount } = require('../../utils/adminHelper');
+const { getAnimalMeta, syncCollection, syncZooStats } = require('../../utils/huntingHelper');
+const { ITEM_RANKS, findItemById, receiveDroppedItem } = require('../../data/shopItems');
+const { findRing } = require('../../data/rings');
 
 module.exports = [
-  // ၁။ ကစားသမားထံ Coins ထည့်ပေးခြင်း (Kaddcoin @user <amount>)
+  // ၁။ Coins ထည့်ပေးခြင်း (Kaddcoin <@user/ID> <amount>)
   {
     names: ['addcoin', 'addcoins'],
     async execute(message, args) {
@@ -11,24 +13,22 @@ module.exports = [
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const target = message.mentions.users.first();
-      const amount = parseInt(args[1], 10);
-
-      if (!target || isNaN(amount) || amount <= 0) {
-        return message.reply('❌ အသုံးပြုပုံ: `Kaddcoin @user <amount>`');
+      const target = await resolveAdminTarget(message, args[0]);
+      const amount = parseAmount(args[1]);
+      if (!target || isNaN(amount)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kaddcoin <@user/ID> <amount>`');
       }
 
-      const targetUser = await getUser(target.id, target.username);
-      targetUser.balance += amount;
-      await targetUser.save();
+      target.dbUser.balance += amount;
+      await target.dbUser.save();
 
       return message.reply(
-        `✅ **${target.username}** ထံသို့ **+${amount.toLocaleString()} coins** ထည့်ပေးပြီးပါပြီ! (လက်ကျန်: **${targetUser.balance.toLocaleString()} coins**)`
+        `✅ **${target.username}** ထံသို့ **+${amount.toLocaleString()} coins** ထည့်ပေးပြီးပါပြီ! (လက်ကျန်: **${target.dbUser.balance.toLocaleString()} coins**)`
       );
     },
   },
 
-  // ၂။ ကစားသမားထံမှ Coins နုတ်ယူခြင်း (Kremovecoin @user <amount>)
+  // ၂။ Coins နုတ်ယူခြင်း (Kremovecoin <@user/ID> <amount>)
   {
     names: ['removecoin', 'removecoins', 'takecoin'],
     async execute(message, args) {
@@ -36,136 +36,176 @@ module.exports = [
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const target = message.mentions.users.first();
-      const amount = parseInt(args[1], 10);
-
-      if (!target || isNaN(amount) || amount <= 0) {
-        return message.reply('❌ အသုံးပြုပုံ: `Kremovecoin @user <amount>`');
+      const target = await resolveAdminTarget(message, args[0]);
+      const amount = parseAmount(args[1]);
+      if (!target || isNaN(amount)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kremovecoin <@user/ID> <amount>`');
       }
 
-      const targetUser = await getUser(target.id, target.username);
-      targetUser.balance = Math.max(0, targetUser.balance - amount);
-      await targetUser.save();
+      target.dbUser.balance = Math.max(0, target.dbUser.balance - amount);
+      await target.dbUser.save();
 
       return message.reply(
-        `✅ **${target.username}** ထံမှ **-${amount.toLocaleString()} coins** နုတ်ယူပြီးပါပြီ! (လက်ကျန်: **${targetUser.balance.toLocaleString()} coins**)`
+        `✅ **${target.username}** ထံမှ **-${amount.toLocaleString()} coins** နုတ်ယူပြီးပါပြီ! (လက်ကျန်: **${target.dbUser.balance.toLocaleString()} coins**)`
       );
     },
   },
 
-  // ၃။ Bot အသုံးပြုခွင့် ပိတ်ပင်ခြင်း (Kban @user)
+  // ၃။ Coins ပမာဏ တိုက်ရိုက်သတ်မှတ်ခြင်း (Ksetcoin <@user/ID> <amount>)
   {
-    names: ['ban', 'botban'],
-    async execute(message) {
+    names: ['setcoin', 'setcoins'],
+    async execute(message, args) {
       if (!isOwner(message.author.id)) {
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const target = message.mentions.users.first();
-      if (!target) {
-        return message.reply('❌ ပိတ်ပင်မယ့် User ကို Mention ခေါ်ပါ။ (ဥပမာ - `Kban @user`)');
-      }
-      if (isOwner(target.id)) {
-        return message.reply('❌ Bot Owner ကို ပိတ်ပင်၍ မရပါ။');
+      const target = await resolveAdminTarget(message, args[0]);
+      const amount = parseAmount(args[1], true);
+      if (!target || isNaN(amount)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Ksetcoin <@user/ID> <amount>`');
       }
 
-      const targetUser = await getUser(target.id, target.username);
-      targetUser.isBanned = true;
-      await targetUser.save();
+      target.dbUser.balance = amount;
+      await target.dbUser.save();
 
-      return message.reply(`🚫 **${target.username}** ကို Keo Bot အသုံးပြုခွင့် ပိတ်ပင်လိုက်ပါပြီ။`);
+      return message.reply(
+        `✅ **${target.username}** ၏ လက်ကျန်ငွေကို **${amount.toLocaleString()} coins** သို့ သတ်မှတ်ပြီးပါပြီ!`
+      );
     },
   },
 
-  // ၄။ Bot အသုံးပြုခွင့် ပြန်ဖွင့်ပေးခြင်း (Kunban @user)
+  // ၄။ Lucky Crate ထည့်ပေးခြင်း (Kaddcrate <@user/ID> <count>)
   {
-    names: ['unban', 'botunban'],
-    async execute(message) {
+    names: ['addcrate', 'addcrates', 'addlc'],
+    async execute(message, args) {
       if (!isOwner(message.author.id)) {
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const target = message.mentions.users.first();
-      if (!target) {
-        return message.reply('❌ ပြန်ဖွင့်ပေးမယ့် User ကို Mention ခေါ်ပါ။ (ဥပမာ - `Kunban @user`)');
+      const target = await resolveAdminTarget(message, args[0]);
+      const count = parseAmount(args[1]);
+      if (!target || isNaN(count)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kaddcrate <@user/ID> <count>`');
       }
 
-      const targetUser = await getUser(target.id, target.username);
-      targetUser.isBanned = false;
-      await targetUser.save();
+      target.dbUser.boxes = (target.dbUser.boxes || 0) + count;
+      await target.dbUser.save();
 
-      return message.reply(`✅ **${target.username}** ကို Keo Bot အသုံးပြုခွင့် ပြန်ဖွင့်ပေးလိုက်ပါပြီ။`);
+      return message.reply(
+        `🎁 **${target.username}** ထံသို့ **Lucky Crate (\`lc\`) +${count.toLocaleString()} လုံး** ထည့်ပေးပြီးပါပြီ! (စုစုပေါင်း: **${target.dbUser.boxes.toLocaleString()} လုံး**)`
+      );
     },
   },
 
-  // ၅။ Bot အခြေအနေ ကြည့်ရှုခြင်း (Kbotstats)
+  // ၅။ တိရစ္ဆာန် တိုက်ရိုက်ထည့်ပေးခြင်း (Kaddanimal <@user/ID> <animalId> [qty])
   {
-    names: ['botstats', 'stats'],
-    async execute(message) {
+    names: ['addanimal', 'giveanimal'],
+    async execute(message, args) {
       if (!isOwner(message.author.id)) {
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const totalUsers = await User.countDocuments();
-      const bannedUsers = await User.countDocuments({ isBanned: true });
-      const guildCount = message.client.guilds.cache.size;
-      const ping = message.client.ws.ping;
+      const target = await resolveAdminTarget(message, args[0]);
+      const animal = findAnimal(args[1]);
+      const qty = args[2] !== undefined ? parseAmount(args[2]) : 1;
 
-      const uptimeSec = Math.floor(process.uptime());
-      const days = Math.floor(uptimeSec / 86400);
-      const hours = Math.floor((uptimeSec % 86400) / 3600);
-      const mins = Math.floor((uptimeSec % 3600) / 60);
+      if (!target || !animal || isNaN(qty)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kaddanimal <@user/ID> <animalId> [အရေအတွက်]` (ဥပမာ - `Kaddanimal @user celestiallord 1`)');
+      }
 
-      const statsEmbed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle('📊 Keo Bot စနစ် အခြေအနေ (Bot Stats)')
-        .addFields(
-          { name: '🌐 Server အရေအတွက်', value: `**${guildCount.toLocaleString()} ခု**`, inline: true },
-          { name: '👥 စုစုပေါင်း ကစားသမား', value: `**${totalUsers.toLocaleString()} ဦး**`, inline: true },
-          { name: '🚫 Ban ထားသူ', value: `**${bannedUsers.toLocaleString()} ဦး**`, inline: true },
-          { name: '📶 Ping', value: `**${ping} ms**`, inline: true },
-          { name: '⏱️ Uptime', value: `**${days}ရက် ${hours}နာရီ ${mins}မိနစ်**`, inline: true }
-        )
-        .setTimestamp();
+      if (!target.dbUser.zoo) target.dbUser.zoo = {};
+      target.dbUser.zoo[animal.name] = (Number(target.dbUser.zoo[animal.name]) || 0) + qty;
+      target.dbUser.markModified('zoo');
+      syncCollection(target.dbUser);
+      syncZooStats(target.dbUser);
+      await target.dbUser.save();
 
-      return message.reply({ embeds: [statsEmbed] });
+      const meta = getAnimalMeta(animal);
+      return message.reply(
+        `🐾 **${target.username}** ထံသို့ ${meta.rankEmoji} ${animal.emoji} **${animal.name}** × **${qty}** ထည့်ပေးပြီးပါပြီ!`
+      );
     },
   },
-  // ၆။ Database ထဲရှိ Zoo String Data များကို Number စစ်စစ် ပြန်ပြောင်းခြင်း (Kfixzoo)
+
+  // ၆။ Hunt Item တိုက်ရိုက်ထည့်ပေးခြင်း (Kadditem <@user/ID> <itemId>)
   {
-    names: ['fixzoo'],
-    async execute(message) {
+    names: ['additem', 'giveitem'],
+    async execute(message, args) {
       if (!isOwner(message.author.id)) {
         return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
       }
 
-      const allUsers = await User.find({});
-      let fixedUsers = 0;
-
-      for (const u of allUsers) {
-        if (!u.zoo || typeof u.zoo !== 'object') continue;
-        let changed = false;
-        const cleanZoo = {};
-
-        for (const [name, rawCount] of Object.entries(u.zoo)) {
-          const num = Number(rawCount);
-          if (typeof rawCount !== 'number' || isNaN(num)) {
-            changed = true;
-          }
-          if (!isNaN(num) && num > 0) {
-            cleanZoo[name] = Math.floor(num);
-          }
-        }
-
-        if (changed) {
-          u.zoo = cleanZoo;
-          u.markModified('zoo');
-          await u.save();
-          fixedUsers += 1;
-        }
+      const target = await resolveAdminTarget(message, args[0]);
+      const item = findItemById(args[1]);
+      if (!target || !item) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kadditem <@user/ID> <itemId>` (ဥပမာ - `Kadditem @user luck7`)');
       }
 
-      return message.reply(`✅ Database စစ်ဆေးပြီးပါပြီ! စုစုပေါင်း User **${fixedUsers} ဦး** ရဲ့ Zoo Data များကို Number စစ်စစ် ပြန်ပြောင်းပေးလိုက်ပါပြီ။`);
+      const res = receiveDroppedItem(target.dbUser, item);
+      await target.dbUser.save();
+
+      const rInfo = ITEM_RANKS[item.rank] || ITEM_RANKS[1];
+      const note = res.equipped ? 'တိုက်ရိုက် တပ်ဆင်ပြီး' : 'အိတ် (Storage) ထဲ သိမ်းဆည်းပြီး';
+      return message.reply(
+        `🎒 **${target.username}** ထံသို့ ${rInfo.emoji} **[R${item.rank}] ${item.name}** (\`${item.id}\`) ထည့်ပေးပြီးပါပြီ! *(${note})*`
+      );
+    },
+  },
+
+  // ၇။ Marriage Ring တိုက်ရိုက်ထည့်ပေးခြင်း (Kaddring <@user/ID> <ringId> [qty])
+  {
+    names: ['addring', 'givering'],
+    async execute(message, args) {
+      if (!isOwner(message.author.id)) {
+        return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
+      }
+
+      const target = await resolveAdminTarget(message, args[0]);
+      const ring = findRing(args[1]);
+      const qty = args[2] !== undefined ? parseAmount(args[2]) : 1;
+
+      if (!target || !ring || isNaN(qty)) {
+        return message.reply('❌ အသုံးပြုပုံ: `Kaddring <@user/ID> <ring1-5> [အရေအတွက်]`');
+      }
+
+      target.dbUser.rings = target.dbUser.rings || {};
+      target.dbUser.rings[ring.id] = (Number(target.dbUser.rings[ring.id]) || 0) + qty;
+      target.dbUser.markModified('rings');
+      await target.dbUser.save();
+
+      return message.reply(
+        `💍 **${target.username}** ထံသို့ ${ring.emoji} **${ring.name}** (${ring.mmName}) × **${qty}** ထည့်ပေးပြီးပါပြီ!`
+      );
+    },
+  },
+
+  // ၈။ Profile Level သို့မဟုတ် Battle Level သတ်မှတ်ခြင်း (Ksetlvl <@user/ID> <profile/battle> <level>)
+  {
+    names: ['setlvl', 'setlevel'],
+    async execute(message, args) {
+      if (!isOwner(message.author.id)) {
+        return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
+      }
+
+      const target = await resolveAdminTarget(message, args[0]);
+      const type = args[1]?.toLowerCase();
+      const lvl = parseAmount(args[2]);
+
+      if (!target || !['profile', 'p', 'battle', 'b'].includes(type) || isNaN(lvl) || lvl > 999) {
+        return message.reply('❌ အသုံးပြုပုံ: `Ksetlvl <@user/ID> <profile|battle> <1-999>`');
+      }
+
+      if (type === 'profile' || type === 'p') {
+        target.dbUser.level = lvl;
+        target.dbUser.exp = 0;
+        await target.dbUser.save();
+        return message.reply(`🏅 **${target.username}** ၏ **Profile Level** ကို **Lv.${lvl}** သို့ ပြောင်းလဲပြီးပါပြီ!`);
+      }
+
+      target.dbUser.battleLevel = lvl;
+      target.dbUser.battleExp = 0;
+      await target.dbUser.save();
+      return message.reply(`⚔️ **${target.username}** ၏ **Battle Level** ကို **Lv.${lvl}** သို့ ပြောင်းလဲပြီးပါပြီ!`);
     },
   },
 ];

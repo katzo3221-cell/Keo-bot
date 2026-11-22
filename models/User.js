@@ -83,6 +83,7 @@ const userSchema = new mongoose.Schema({
 
   // Bot အသုံးပြုခွင့် ပိတ်ပင်ခြင်း (Admin Ban)
   isBanned: { type: Boolean, default: false },
+  isHiddenTop: { type: Boolean, default: false },
 
   // Daily Quest စနစ်
   dailyQuestDate: { type: String, default: '' },

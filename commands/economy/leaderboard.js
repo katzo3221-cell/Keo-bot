@@ -13,7 +13,7 @@ module.exports = [
     async execute(message, args) {
       const category = (args[0] || 'cash').toLowerCase();
       const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-      const activeFilter = { isBanned: { $ne: true } };
+      const activeFilter = { isBanned: { $ne: true }, isHiddenTop: { $ne: true } };
 
       let title = '';
       let color = '#FF4500';
