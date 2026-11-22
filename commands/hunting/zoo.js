@@ -10,6 +10,64 @@ const {
   syncBattleTeam,
 } = require('../../utils/huntingHelper');
 
+// Rank နာမည်အပြည့်၊ Space ခြား နှင့် အတိုကောက်အားလုံးကို ခွဲခြားသိရှိရန်
+const RANK_ALIASES = {
+  c: '(Common)',
+  com: '(Common)',
+  common: '(Common)',
+
+  u: '(Uncommon)',
+  uc: '(Uncommon)',
+  uncom: '(Uncommon)',
+  uncommon: '(Uncommon)',
+
+  r: '(Rare)',
+  rare: '(Rare)',
+
+  sr: '(Super Rare)',
+  srare: '(Super Rare)',
+  superrare: '(Super Rare)',
+
+  e: '(Epic)',
+  epic: '(Epic)',
+
+  ue: '(Ultra Epic)',
+  uepic: '(Ultra Epic)',
+  ultraepic: '(Ultra Epic)',
+
+  l: '(Legendary)',
+  leg: '(Legendary)',
+  legend: '(Legendary)',
+  legendary: '(Legendary)',
+
+  m: '(Mythical)',
+  myth: '(Mythical)',
+  mythic: '(Mythical)',
+  mythical: '(Mythical)',
+
+  d: '(Divine)',
+  div: '(Divine)',
+  divine: '(Divine)',
+
+  cel: '(Celestial)',
+  celestial: '(Celestial)',
+};
+
+function resolveRankTag(rawArgs) {
+  if (!rawArgs || rawArgs.length === 0) return null;
+
+  // 'rank' သို့မဟုတ် 'all' စကားလုံး အပိုပါလာပါက ဖယ်ထုတ်စစ်ဆေးခြင်း
+  const filtered = rawArgs
+    .map((a) => a.toLowerCase().trim())
+    .filter((a) => a && a !== 'rank' && a !== 'all');
+
+  if (filtered.length === 0) return null;
+
+  // Space၊ အစက် (.)၊ - နှင့် _ များကို ဖယ်ပြီး တိုက်စစ်ခြင်း (ဥပမာ- "super rare", "s.rare", "u.epic")
+  const normalized = filtered.join('').replace(/[\s._-]+/g, '');
+  return RANK_ALIASES[normalized] || null;
+}
+
 module.exports = [
   // ၁။ တိရစ္ဆာန်ရုံ ကြည့်ခြင်း (Kzoo / Kz / Kzoo id / Kzooid)
   {
@@ -92,7 +150,7 @@ module.exports = [
           )
           .setFooter({
             text: showIds
-              ? 'အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell <id> [အရေအတွက်]'
+              ? 'အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell <id/rank> [အရေအတွက်]'
               : 'ID ကြည့်ရန်: Kzoo id | အဖွဲ့ရွေးရန်: Kteam <id1> [id2] [id3] | ရောင်းရန်: Ksell all',
           });
 
@@ -161,11 +219,14 @@ module.exports = [
     },
   },
 
-  // ၂။ တိရစ္ဆာန် ရောင်းချခြင်း (Ksell all / Ksell <id> [count/all] / Ksell <rank>)
+  // ၂။ တိရစ္ဆာန် ရောင်းချခြင်း (Ksell all / Ksell <rank> / Ksell <id> [count/all])
   {
     names: ['sell', 'sellall'],
     async execute(message, args, user, commandName) {
-      const entries = Object.entries(user.zoo || {}).filter(([, count]) => count > 0);
+      const entries = Object.entries(user.zoo || {})
+        .map(([name, rawCount]) => [name, Number(rawCount) || 0])
+        .filter(([, count]) => count > 0);
+
       if (entries.length === 0) {
         return message.reply('❌ ရောင်းစရာ တိရစ္ဆာန် တစ်ကောင်မှ မရှိပါဘူး။');
       }
@@ -175,12 +236,17 @@ module.exports = [
 
       const firstArg = args[0]?.toLowerCase();
 
-      if (commandName === 'sellall' || firstArg === 'all') {
+      // အားလုံးရောင်းခြင်း (Ksellall သို့မဟုတ် Ksell all တစ်ခုတည်းရိုက်မှသာ အကုန်ရောင်းမည်)
+      const isSellAll =
+        (commandName === 'sellall' && args.length === 0) ||
+        (firstArg === 'all' && args.length === 1);
+
+      if (isSellAll) {
         const protectedCounts = {};
         for (const id of user.battleTeam || []) {
           const info = ANIMALS.find((a) => a.id === id);
           if (!info) continue;
-          const owned = (user.zoo && user.zoo[info.name]) || 0;
+          const owned = Number(user.zoo && user.zoo[info.name]) || 0;
           const alreadyProtected = protectedCounts[info.name] || 0;
           if (owned > alreadyProtected) {
             protectedCounts[info.name] = alreadyProtected + 1;
@@ -233,32 +299,19 @@ module.exports = [
 
       if (!firstArg) {
         return message.reply(
-          '❌ ရောင်းမယ့် အကောင် ID သို့မဟုတ် `all` ထည့်ပေးပါ!\n' +
-          'ဥပမာ - `Ksell ant` | `Ksell rabbit 3` | `Ksell rabbit all` | `Ksell all`'
+          '❌ ရောင်းမယ့် အကောင် ID၊ Rank သို့မဟုတ် `all` ထည့်ပေးပါ!\n' +
+          'ဥပမာ - `Ksell ant` | `Ksell rabbit 3` | `Ksell common` | `Ksell super rare` | `Ksell all`'
         );
       }
 
-      const rankMap = {
-        common: '(Common)',
-        uncommon: '(Uncommon)',
-        rare: '(Rare)',
-        superrare: '(Super Rare)',
-        epic: '(Epic)',
-        ultraepic: '(Ultra Epic)',
-        legendary: '(Legendary)',
-        mythical: '(Mythical)',
-        divine: '(Divine)',
-        celestial: '(Celestial)',
-      };
-
-      if (rankMap[firstArg]) {
-        const rankTag = rankMap[firstArg];
-
+      // Rank အလိုက် ရောင်းချခြင်း (ဥပမာ- Ksell common, Ksell super rare, Ksell legend, Ksell all rare, Ksell rank epic)
+      const matchedRankTag = resolveRankTag(args);
+      if (matchedRankTag) {
         const protectedCounts = {};
         for (const id of user.battleTeam || []) {
           const info = ANIMALS.find((a) => a.id === id);
           if (!info) continue;
-          const owned = (user.zoo && user.zoo[info.name]) || 0;
+          const owned = Number(user.zoo && user.zoo[info.name]) || 0;
           const alreadyProtected = protectedCounts[info.name] || 0;
           if (owned > alreadyProtected) {
             protectedCounts[info.name] = alreadyProtected + 1;
@@ -270,7 +323,7 @@ module.exports = [
         let keptTotal = 0;
 
         for (const [name, count] of entries) {
-          if (name.includes(rankTag)) {
+          if (name.endsWith(matchedRankTag)) {
             const info = ANIMALS.find((a) => a.name === name);
             if (!info) continue;
 
@@ -294,11 +347,11 @@ module.exports = [
         if (soldTotal === 0) {
           if (keptTotal > 0) {
             return message.reply(
-              `🛡️ ရောင်းစရာ **${rankTag}** အကောင် မရှိပါဘူး! လက်ကျန် **${keptTotal} ကောင်** လုံးက **Battle Team** ထဲမှာ တပ်ဆင်ထားပါတယ်။\n` +
+              `🛡️ ရောင်းစရာ **${matchedRankTag}** အကောင် မရှိပါဘူး! လက်ကျန် **${keptTotal} ကောင်** လုံးက **Battle Team** ထဲမှာ တပ်ဆင်ထားပါတယ်။\n` +
               '*(အဲဒီအကောင်တွေကိုပါ ရောင်းချင်ရင် `Kteam clear` အရင်ရိုက်ပါ)*'
             );
           }
-          return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ **${rankTag}** အကောင် မရှိပါဘူး။`);
+          return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ **${matchedRankTag}** အကောင် မရှိပါဘူး။`);
         }
 
         syncBattleTeam(user);
@@ -308,20 +361,21 @@ module.exports = [
         await user.save();
 
         const keepNote = keptTotal > 0
-          ? `\n🛡️ *(Battle Team ထဲမှ **${rankTag}** အကောင် **${keptTotal} ကောင်** ကို မရောင်းဘဲ ချန်ထားပေးထားပါသည်)*`
+          ? `\n🛡️ *(Battle Team ထဲမှ **${matchedRankTag}** အကောင် **${keptTotal} ကောင်** ကို မရောင်းဘဲ ချန်ထားပေးထားပါသည်)*`
           : '';
 
         return message.reply(
-          `💵 **${rankTag}** တိရစ္ဆာန် စုစုပေါင်း **${soldTotal.toLocaleString()} ကောင်** ကို ရောင်းချလိုက်ရာ **+${rankEarned.toLocaleString()} coins** ရရှိပါပြီ!${keepNote}`
+          `💵 **${matchedRankTag}** တိရစ္ဆာန် စုစုပေါင်း **${soldTotal.toLocaleString()} ကောင်** ကို ရောင်းချလိုက်ရာ **+${rankEarned.toLocaleString()} coins** ရရှိပါပြီ!${keepNote}`
         );
       }
 
+      // တစ်ကောင်ချင်း ID ဖြင့် ရောင်းချခြင်း
       const targetAnimal = findAnimal(firstArg);
       if (!targetAnimal) {
-        return message.reply(`❌ \`${args[0]}\` ဆိုတဲ့ တိရစ္ဆာန် ID မတွေ့ပါဘူး!`);
+        return message.reply(`❌ \`${args.join(' ')}\` ဆိုတဲ့ တိရစ္ဆာန် ID သို့မဟုတ် Rank နာမည် မတွေ့ပါဘူး!`);
       }
 
-      const ownedCount = (user.zoo && user.zoo[targetAnimal.name]) || 0;
+      const ownedCount = Number(user.zoo && user.zoo[targetAnimal.name]) || 0;
       if (ownedCount <= 0) {
         const meta = getAnimalMeta(targetAnimal);
         return message.reply(`❌ သင့်တိရစ္ဆာန်ရုံထဲမှာ ${meta.rankEmoji} ${targetAnimal.emoji} **${meta.shortName}** (\`${targetAnimal.id}\`) မရှိပါဘူး။`);
