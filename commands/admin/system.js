@@ -261,4 +261,46 @@ module.exports = [
       return message.reply({ embeds: [embed] });
     },
   },
+  // ၆။ Bot ဝင်ရောက်နေသော Server စာရင်း ကြည့်ရှုခြင်း (Kservers / Ksv)
+  {
+    names: ['servers', 'svlist', 'sv', 'guilds'],
+    async execute(message, args) {
+      if (!isOwner(message.author.id)) {
+        return message.reply('🚫 ဒီ Command ကို Bot Owner သာ အသုံးပြုနိုင်ပါသည်။');
+      }
+
+      const guilds = Array.from(message.client.guilds.cache.values())
+        .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
+
+      if (guilds.length === 0) {
+        return message.reply('❌ Bot ဝင်ရောက်ထားသော Server မရှိသေးပါ။');
+      }
+
+      const pageSize = 15;
+      const totalPages = Math.ceil(guilds.length / pageSize);
+      let page = parseInt(args[0], 10) || 1;
+      if (page < 1) page = 1;
+      if (page > totalPages) page = totalPages;
+
+      const start = (page - 1) * pageSize;
+      const pageGuilds = guilds.slice(start, start + pageSize);
+      const totalMembers = guilds.reduce((sum, g) => sum + (g.memberCount || 0), 0);
+
+      const lines = pageGuilds.map((g, idx) => {
+        const rank = start + idx + 1;
+        return `**${rank}. ${g.name}**\n└ ID: \`${g.id}\` • 👥 **${(g.memberCount || 0).toLocaleString()}** ဦး`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`🌐 Keo Bot ရှိနေသော Server များ (${guilds.length} ခု)`)
+        .setDescription(lines.join('\n\n'))
+        .setFooter({
+          text: `စာမျက်နှာ ${page}/${totalPages} • စုစုပေါင်း Member: ${totalMembers.toLocaleString()} ဦး | နောက်စာမျက်နှာ: Ksv 2`,
+        })
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
+    },
+  },
 ];
