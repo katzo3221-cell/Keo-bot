@@ -65,10 +65,14 @@ client.once('clientReady', () => {
 
 client.on('messageCreate', async (message) => {
   // k နောက်တွင် Space မပါဘဲ အင်္ဂလိပ်စာလုံး တိုက်ရိုက်ပါမှ Command အဖြစ် ဖတ်မည်
-  if (message.author.bot || !/^k[a-z]/i.test(message.content)) return;
+  const content = message.content.trim();
+if (!content.toLowerCase().startsWith('k')) return;
 
-  const args = message.content.slice(1).trim().split(/ +/);
-  const commandName = args.shift().toLowerCase();
+const withoutPrefix = content.slice(1).trim();
+if (!withoutPrefix) return;
+
+const args = withoutPrefix.split(/\s+/);
+const commandName = args.shift().toLowerCase();
 
   const commandObj = commandMap.get(commandName);
   if (!commandObj) return;
