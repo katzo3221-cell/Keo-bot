@@ -1,4 +1,10 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  AttachmentBuilder,
+} = require('discord.js');
 const {
   getUser,
   addBattleExpReward,
@@ -15,45 +21,56 @@ const {
 const {
   buildBattleUnits,
   simulateBattle,
-  selectAnimationFrames,
-  renderTeamField,
   pickArenaAndEnemy,
 } = require('../../utils/battleEngine');
+const { renderBattleCard } = require('../../utils/battleCanvas');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function formatPvpLevelUp(username, userObj, expRes) {
   if (!expRes.leveledUp) return '';
   const crateNote = expRes.rewardCrates > 0 ? ` နှင့် **Lucky Crate (\`lc\`) +${expRes.rewardCrates} လုံး**` : '';
-  return `\n🔥 **BATTLE LEVEL UP!** **${username}** သည် **Battle Level ${userObj.battleLevel}** သို့ ရောက်ရှိသွားပါပြီ! (ဆု: **+${expRes.rewardCoins.toLocaleString()} coins**${crateNote})`;
+  return `\n🔥 **BATTLE LEVEL UP!** **${username}** ➔ **Battle Lv.${userObj.battleLevel}** (+${expRes.rewardCoins.toLocaleString()} coins${crateNote})`;
 }
 
-// Turn-by-Turn Battle Embed တည်ဆောက်ခြင်း
-function buildCombatEmbed({
+// OwO စတိုင် သပ်ရပ်သော အဖွဲ့စာရင်း အကျဉ်း
+function formatCompactRoster(units, level) {
+  return units
+    .map((u) => `\`Lv.${level}\` ${u.rankEmoji}${u.emoji} **${u.shortName}** • ${u.cls.icon} *${u.cls.title}*`)
+    .join('\n');
+}
+
+// Canvas Battle Card ပါဝင်သော Embed တည်ဆောက်ခြင်း
+function buildCardEmbed({
   color,
-  title,
-  headerLine,
-  logs,
+  authorName,
+  authorIcon,
+  description,
   leftTitle,
-  leftUnits,
+  leftRoster,
   rightTitle,
-  rightUnits,
+  rightRoster,
+  imageFileName,
   footerText,
 }) {
-  const logBlock = logs && logs.length > 0 ? `\n\n${logs.join('\n')}` : '';
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(title)
-    .setDescription(`${headerLine}${logBlock}`)
+    .setAuthor({ name: authorName, iconURL: authorIcon })
     .addFields(
-      { name: leftTitle, value: renderTeamField(leftUnits), inline: true },
-      { name: rightTitle, value: renderTeamField(rightUnits), inline: true }
+      { name: leftTitle, value: leftRoster, inline: true },
+      { name: rightTitle, value: rightRoster, inline: true }
     )
+    .setImage(`attachment://${imageFileName}`)
     .setFooter({ text: footerText });
+
+  if (description) {
+    embed.setDescription(description);
+  }
+  return embed;
 }
 
 module.exports = [
-  // တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် — Fantasy Turn-Based RPG (Solo & PvP)
+  // တိရစ္ဆာန် တိုက်ခိုက်ရေး စနစ် — OwO Style Canvas RPG Card (Solo & PvP)
   {
     names: ['battle', 'b'],
     async execute(message, args, user) {
@@ -74,7 +91,7 @@ module.exports = [
 
       const opponentMention = message.mentions.users.first();
 
-      // ================= PvP FANTASY BATTLE =================
+      // ================= PvP CANVAS BATTLE =================
       if (opponentMention) {
         if (opponentMention.bot) {
           return message.reply('❌ Bot များကို စိန်ခေါ်၍ မရပါ။');
@@ -94,14 +111,14 @@ module.exports = [
 
         const challengeEmbed = new EmbedBuilder()
           .setColor('#9B59B6')
-          .setTitle(`⚔️ PvP Fantasy Arena: ${message.author.username} VS ${opponentMention.username}`)
+          .setTitle(`⚔️ PvP Arena: ${message.author.username} VS ${opponentMention.username}`)
           .setDescription(
-            `**${message.author.username}** (Battle Lv.${myStats.battleLevel}) က **${opponentMention.username}** (Battle Lv.${oppStats.battleLevel}) ကို တိုက်ပွဲစိန်ခေါ်လိုက်ပါပြီ!\n` +
-            `<@${opponentMention.id}> အနေဖြင့် **၃၀ စက္ကန့်အတွင်း** လက်ခံမလား၊ ငြင်းပယ်မလား ရွေးချယ်ပါ —`
+            `**${message.author.username}** က **${opponentMention.username}** ကို တိုက်ပွဲစိန်ခေါ်လိုက်ပါပြီ!\n` +
+            `<@${opponentMention.id}> အနေဖြင့် **၃၀ စက္ကန့်အတွင်း** ရွေးချယ်ပါ —`
           )
           .addFields(
-            { name: `🛡️ ${message.author.username} (Lv.${myStats.battleLevel})`, value: renderTeamField(previewMyUnits), inline: true },
-            { name: `🔥 ${opponentMention.username} (Lv.${oppStats.battleLevel})`, value: renderTeamField(previewOppUnits), inline: true }
+            { name: `🛡️ ${message.author.username} (Lv.${myStats.battleLevel})`, value: formatCompactRoster(previewMyUnits, myStats.battleLevel), inline: true },
+            { name: `🔥 ${opponentMention.username} (Lv.${oppStats.battleLevel})`, value: formatCompactRoster(previewOppUnits, oppStats.battleLevel), inline: true }
           );
 
         const row = new ActionRowBuilder().addComponents(
@@ -146,7 +163,7 @@ module.exports = [
               if (freshMyStats.team.length === 0 || freshOppStats.team.length === 0) {
                 const errEmbed = new EmbedBuilder()
                   .setColor('#E74C3C')
-                  .setDescription('❌ ကစားသမားတစ်ဦးတွင် ရွေးချယ်ထားသော Battle Team မရှိတော့သဖြင့် တိုက်ပွဲပျက်ပြယ်သွားပါပြီ။');
+                  .setDescription('❌ ကစားသမားတစ်ဦးတွင် Battle Team မရှိတော့သဖြင့် တိုက်ပွဲပျက်ပြယ်သွားပါပြီ။');
                 return i.update({ content: '', embeds: [errEmbed], components: [] });
               }
 
@@ -154,103 +171,89 @@ module.exports = [
               const myUnits = buildBattleUnits(freshMyStats.team, freshMyStats.battleLevel, 1.0);
               const oppUnits = buildBattleUnits(freshOppStats.team, freshOppStats.battleLevel, 1.0);
               const sim = simulateBattle(myUnits, oppUnits);
-              const animFrames = selectAnimationFrames(sim.frames);
-
-              const leftTitle = `🛡️ ${message.author.username} (Lv.${freshMyStats.battleLevel})`;
-              const rightTitle = `🔥 ${opponentMention.username} (Lv.${freshOppStats.battleLevel})`;
-              const title = `⚔️ PvP: ${message.author.username} VS ${opponentMention.username}`;
-
               const finalFrame = sim.frames[sim.frames.length - 1];
               const p1Won = sim.winner === 'A';
               const gainedExp = Math.floor(Math.random() * 31) + 45;
-              let resultText = '';
+
+              let bonusText = '';
+              let footerResult = '';
 
               if (p1Won) {
                 const winExpRes = addBattleExpReward(freshUser, gainedExp);
                 updateQuestProgress(freshUser, 'battleWin', 1);
                 const loseExpRes = addBattleExpReward(freshOppUser, 10);
-
                 const crateRes = tryDropBattleCrate(freshUser, 0.20);
-                const crateDropText = crateRes.dropped
-                  ? `\n🎁 PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်! *(ယနေ့ Limit: **${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT}**)*`
-                  : '';
 
                 await freshUser.save();
                 await freshOppUser.save();
 
-                resultText =
-                  `**${arena}**\n` +
-                  `🏆 **${message.author.username}** က **${sim.totalTurns} ကျော့မြောက်** တွင် အနိုင်ရရှိပါတယ်!\n` +
-                  `⚔️ **+${gainedExp} Battle EXP** ရရှိပါတယ်!${crateDropText}` +
-                  formatPvpLevelUp(message.author.username, freshUser, winExpRes) +
-                  formatPvpLevelUp(opponentMention.username, freshOppUser, loseExpRes);
+                if (crateRes.dropped) {
+                  bonusText += `\n🎁 **${message.author.username}** သည် Lucky Crate +1 ရရှိပါတယ်! (${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT})`;
+                }
+                bonusText += formatPvpLevelUp(message.author.username, freshUser, winExpRes);
+                bonusText += formatPvpLevelUp(opponentMention.username, freshOppUser, loseExpRes);
+                footerResult = `🏆 ${message.author.username} အနိုင်ရရှိပါပြီ (${sim.totalTurns} ကျော့) | +${gainedExp} Battle EXP`;
               } else {
                 const winExpRes = addBattleExpReward(freshOppUser, gainedExp);
                 updateQuestProgress(freshOppUser, 'battleWin', 1);
                 const loseExpRes = addBattleExpReward(freshUser, 10);
-
                 const crateRes = tryDropBattleCrate(freshOppUser, 0.20);
-                const crateDropText = crateRes.dropped
-                  ? `\n🎁 **${opponentMention.username}** သည် PvP အောင်ပွဲဆု **Lucky Crate +1** ရရှိပါတယ်! *(ယနေ့ Limit: **${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT}**)*`
-                  : '';
 
                 await freshUser.save();
                 await freshOppUser.save();
 
-                resultText =
-                  `**${arena}**\n` +
-                  `🏆 **${opponentMention.username}** က **${sim.totalTurns} ကျော့မြောက်** တွင် အနိုင်ရရှိပါတယ်!\n` +
-                  `⚔️ **${opponentMention.username}** (+${gainedExp} EXP) | **${message.author.username}** (+10 EXP)${crateDropText}` +
-                  formatPvpLevelUp(opponentMention.username, freshOppUser, winExpRes) +
-                  formatPvpLevelUp(message.author.username, freshUser, loseExpRes);
+                if (crateRes.dropped) {
+                  bonusText += `\n🎁 **${opponentMention.username}** သည် Lucky Crate +1 ရရှိပါတယ်! (${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT})`;
+                }
+                bonusText += formatPvpLevelUp(opponentMention.username, freshOppUser, winExpRes);
+                bonusText += formatPvpLevelUp(message.author.username, freshUser, loseExpRes);
+                footerResult = `🏆 ${opponentMention.username} အနိုင်ရရှိပါပြီ (${sim.totalTurns} ကျော့) | +${gainedExp} Battle EXP`;
               }
 
-              const introEmbed = buildCombatEmbed({
+              const leftTitle = `🛡️ ${message.author.username}'s Team`;
+              const rightTitle = `🔥 ${opponentMention.username}'s Team`;
+              const leftRoster = formatCompactRoster(myUnits, freshMyStats.battleLevel);
+              const rightRoster = formatCompactRoster(oppUnits, freshOppStats.battleLevel);
+
+              const [startBuf, finalBuf] = await Promise.all([
+                renderBattleCard(myUnits, oppUnits),
+                renderBattleCard(finalFrame.teamA, finalFrame.teamB),
+              ]);
+
+              const startFile = new AttachmentBuilder(startBuf, { name: 'pvp-start.png' });
+              const startEmbed = buildCardEmbed({
                 color: '#F39C12',
-                title,
-                headerLine: `**${arena}** • ⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
-                logs: [],
+                authorName: `${message.author.username} VS ${opponentMention.username}`,
+                authorIcon: message.author.displayAvatarURL(),
+                description: `**${arena}** • ⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
                 leftTitle,
-                leftUnits: myUnits,
+                leftRoster,
                 rightTitle,
-                rightUnits: oppUnits,
-                footerText: 'Turn 1 စတင်နေပါသည်...',
+                rightRoster,
+                imageFileName: 'pvp-start.png',
+                footerText: 'PvP တိုက်ပွဲ တိုက်ခိုက်နေပါသည်...',
               });
 
-              await i.update({ content: '', embeds: [introEmbed], components: [] });
+              await i.update({ content: '', embeds: [startEmbed], components: [], files: [startFile] });
 
-              for (let idx = 0; idx < animFrames.length; idx++) {
-                await sleep(1100);
-                const frame = animFrames[idx];
-                if (idx === animFrames.length - 1) break;
+              await sleep(1300);
 
-                const turnEmbed = buildCombatEmbed({
-                  color: '#F39C12',
-                  title,
-                  headerLine: `**${arena}** • 🔥 **Turn ${frame.turn}**`,
-                  logs: frame.logs,
-                  leftTitle,
-                  leftUnits: frame.teamA,
-                  rightTitle,
-                  rightUnits: frame.teamB,
-                  footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
-                });
-                await challengeMsg.edit({ embeds: [turnEmbed] }).catch(() => {});
-              }
-
-              const finalEmbed = buildCombatEmbed({
+              const highlightLog = finalFrame.logs[finalFrame.logs.length - 1] || '';
+              const finalFile = new AttachmentBuilder(finalBuf, { name: 'pvp-final.png' });
+              const finalEmbed = buildCardEmbed({
                 color: p1Won ? '#2ECC71' : '#E74C3C',
-                title,
-                headerLine: resultText,
-                logs: finalFrame.logs,
+                authorName: `${message.author.username} VS ${opponentMention.username}`,
+                authorIcon: message.author.displayAvatarURL(),
+                description: `**${arena}**${highlightLog ? `\n${highlightLog}` : ''}${bonusText}`,
                 leftTitle,
-                leftUnits: finalFrame.teamA,
+                leftRoster,
                 rightTitle,
-                rightUnits: finalFrame.teamB,
-                footerText: `PvP တိုက်ပွဲ ${sim.totalTurns} ကျော့ဖြင့် ပြီးဆုံးပါပြီ`,
+                rightRoster,
+                imageFileName: 'pvp-final.png',
+                footerText: footerResult,
               });
 
-              return challengeMsg.edit({ embeds: [finalEmbed] }).catch(() => {});
+              return challengeMsg.edit({ embeds: [finalEmbed], files: [finalFile], attachments: [] }).catch(() => {});
             }
           } catch (err) {
             console.error('Battle PvP Collect Error:', err);
@@ -269,21 +272,20 @@ module.exports = [
         return;
       }
 
-      // ================= DYNAMIC SOLO FANTASY BATTLE =================
+      // ================= SOLO CANVAS BATTLE =================
       const wild = generateWildEnemy(myStats);
       const { arena, enemySquad } = pickArenaAndEnemy();
 
       const myUnits = buildBattleUnits(myStats.team, myStats.battleLevel, 1.0);
       const enemyUnits = buildBattleUnits(wild.team, wild.wildLevel, wild.difficulty.powerScale);
       const sim = simulateBattle(myUnits, enemyUnits);
-      const animFrames = selectAnimationFrames(sim.frames);
       const finalFrame = sim.frames[sim.frames.length - 1];
       const playerWon = sim.winner === 'A';
 
-      // Animation မစခင် Database ထဲ ချက်ချင်း Save လုပ်ထားခြင်း (အခြား Command များ ဆက်တိုက်ရိုက်နိုင်ရန်)
-      let finalHeader = '';
+      // Database ထဲ ချက်ချင်း Save လုပ်ခြင်း (အခြား Command များ ဆက်တိုက်ရိုက်နိုင်ရန်)
+      let bonusText = '';
       let finalColor = '#E74C3C';
-      let finalFooter = `ရှုံးနိမ့်သွားပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`;
+      let finalFooter = '';
 
       if (playerWon) {
         const baseExp = Math.floor(Math.random() * 26) + 30;
@@ -292,84 +294,78 @@ module.exports = [
         updateQuestProgress(user, 'battleWin', 1);
 
         const crateRes = tryDropBattleCrate(user, wild.difficulty.crateChance);
-        const crateDropText = crateRes.dropped
-          ? `\n🎁 ရန်သူ့စခန်းမှ **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်! *(ယနေ့ Limit: **${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT}**)*`
-          : '';
-
         await user.save();
 
         const bLevel = user.battleLevel || 1;
         finalColor = '#2ECC71';
-        finalFooter = `အနိုင်ရရှိပါပြီ • စုစုပေါင်း ${sim.totalTurns} ကျော့`;
-        finalHeader =
-          `**${arena}** • ${wild.difficulty.label}\n` +
-          `🏆 **${sim.totalTurns} ကျော့မြောက်တွင် အနိုင်ရရှိပါတယ်!**\n` +
-          `⚔️ **+${gainedExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${crateDropText}${expRes.levelUpText}`;
+        finalFooter = `🏆 ${sim.totalTurns} ကျော့မြောက်တွင် အနိုင်ရရှိပါပြီ! | +${gainedExp} Battle EXP (${user.battleExp}/${bLevel * 100})`;
+
+        if (crateRes.dropped) {
+          bonusText += `\n🎁 **Lucky Crate +1** သိမ်းပိုက်ရရှိပါတယ်! *(ယနေ့ Limit: ${crateRes.dailyCount}/${DAILY_BATTLE_CRATE_LIMIT})*`;
+        }
+        if (expRes.levelUpText) {
+          bonusText += expRes.levelUpText;
+        }
       } else {
         const loseExp = 8 + Math.floor(wild.difficulty.bonusExp / 5);
         const expRes = addBattleExpReward(user, loseExp);
         await user.save();
 
         const bLevel = user.battleLevel || 1;
-        finalHeader =
-          `**${arena}** • ${wild.difficulty.label}\n` +
-          `💀 **${sim.totalTurns} ကျော့မြောက်တွင် ရှုံးနိမ့်သွားပါတယ်!**\n` +
-          `📖 **+${loseExp} Battle EXP** (${user.battleExp}/${bLevel * 100} EXP)${expRes.levelUpText}`;
+        finalFooter = `💀 ${sim.totalTurns} ကျော့မြောက်တွင် ရှုံးနိမ့်သွားပါပြီ | +${loseExp} Battle EXP (${user.battleExp}/${bLevel * 100})`;
+        if (expRes.levelUpText) {
+          bonusText += expRes.levelUpText;
+        }
       }
 
-      const leftTitle = `🛡️ ${message.author.username} (Lv.${myStats.battleLevel})`;
-      const rightTitle = `${enemySquad} (Lv.${wild.wildLevel})`;
-      const title = `⚔️ ${message.author.username} VS ${enemySquad}`;
+      const leftTitle = `🛡️ ${message.author.username}'s Team`;
+      const rightTitle = `${enemySquad}`;
+      const leftRoster = formatCompactRoster(myUnits, myStats.battleLevel);
+      const rightRoster = formatCompactRoster(enemyUnits, wild.wildLevel);
 
-      const startEmbed = buildCombatEmbed({
+      // Start Card နှင့် Final Card နှစ်ပုံလုံးကို တစ်ပြိုင်တည်း ကြိုဆွဲထားခြင်း
+      const [startBuf, finalBuf] = await Promise.all([
+        renderBattleCard(myUnits, enemyUnits),
+        renderBattleCard(finalFrame.teamA, finalFrame.teamB),
+      ]);
+
+      const startFile = new AttachmentBuilder(startBuf, { name: 'battle-start.png' });
+      const startEmbed = buildCardEmbed({
         color: wild.difficulty.color,
-        title,
-        headerLine: `**${arena}** • ${wild.difficulty.label}\n⚔️ *တိုက်ပွဲ စတင်နေပါပြီ...*`,
-        logs: [],
+        authorName: `${message.author.username} goes into battle!`,
+        authorIcon: message.author.displayAvatarURL(),
+        description: `**${arena}** • ${wild.difficulty.label}`,
         leftTitle,
-        leftUnits: myUnits,
+        leftRoster,
         rightTitle,
-        rightUnits: enemyUnits,
-        footerText: 'Turn 1 စတင်နေပါသည်...',
+        rightRoster,
+        imageFileName: 'battle-start.png',
+        footerText: '⚔️ တိုက်ပွဲ တိုက်ခိုက်နေပါသည်...',
       });
 
-      const msg = await message.reply({ embeds: [startEmbed] });
+      const msg = await message.reply({ embeds: [startEmbed], files: [startFile] });
 
-      // Animation ကို Background မှာ ဆက်ပြောင်းပြစေခြင်း (await မလုပ်သဖြင့် ချက်ချင်း Kh စသည် ရိုက်နိုင်မည်)
+      // Background မှာ ၁.၃ စက္ကန့်အကြာ Final Result Card ပြောင်းပြခြင်း (Kh စသည် ချက်ချင်းဆက်ရိုက်နိုင်မည်)
       (async () => {
-        for (let idx = 0; idx < animFrames.length; idx++) {
-          await sleep(1100);
-          const frame = animFrames[idx];
-          if (idx === animFrames.length - 1) break;
+        await sleep(1300);
 
-          const turnEmbed = buildCombatEmbed({
-            color: '#F39C12',
-            title,
-            headerLine: `**${arena}** • ${wild.difficulty.label} • 🔥 **Turn ${frame.turn}**`,
-            logs: frame.logs,
-            leftTitle,
-            leftUnits: frame.teamA,
-            rightTitle,
-            rightUnits: frame.teamB,
-            footerText: `Turn ${frame.turn} တိုက်ခိုက်နေပါသည်...`,
-          });
-          await msg.edit({ embeds: [turnEmbed] }).catch(() => {});
-        }
-
-        const finalEmbed = buildCombatEmbed({
+        const highlightLog = finalFrame.logs[finalFrame.logs.length - 1] || '';
+        const finalFile = new AttachmentBuilder(finalBuf, { name: 'battle-final.png' });
+        const finalEmbed = buildCardEmbed({
           color: finalColor,
-          title,
-          headerLine: finalHeader,
-          logs: finalFrame.logs,
+          authorName: `${message.author.username} goes into battle!`,
+          authorIcon: message.author.displayAvatarURL(),
+          description: `**${arena}** • ${wild.difficulty.label}${highlightLog ? `\n${highlightLog}` : ''}${bonusText}`,
           leftTitle,
-          leftUnits: finalFrame.teamA,
+          leftRoster,
           rightTitle,
-          rightUnits: finalFrame.teamB,
+          rightRoster,
+          imageFileName: 'battle-final.png',
           footerText: finalFooter,
         });
 
-        await msg.edit({ embeds: [finalEmbed] }).catch(() => {});
-      })().catch((err) => console.error('Battle Animation Error:', err));
+        await msg.edit({ embeds: [finalEmbed], files: [finalFile], attachments: [] }).catch(() => {});
+      })().catch((err) => console.error('Battle Canvas Edit Error:', err));
     },
   },
 ];
