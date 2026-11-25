@@ -10,7 +10,7 @@ const ANIMALS = [
   { id: 'bee', name: 'ပျားကလေး (Common)', emoji: '🐝', price: 5, chance: 4.5 },
   { id: 'butterfly', name: 'လိပ်ပြာလေး (Common)', emoji: '🦋', price: 5, chance: 4.5 },
   { id: 'snail', name: 'ခရုပက်ကျိ (Common)', emoji: '🐌', price: 5, chance: 4.0 },
-  { id: 'worm', name: 'တီကောင်လေး (Common)', emoji: '🪱', price: 5, chance: 4.0 },
+  { id: 'lizard', name: 'အိမ်မြှောင်လေး (Common)', emoji: '🦎', price: 5, chance: 4.0 },
 
   // 🔵 Rank 2: Uncommon (အတွေ့ရနည်း - စုစုပေါင်း 25% | ဈေးနှုန်း: 20 coins)
   { id: 'rabbit', name: 'ယုန်ဖြူလေး (Uncommon)', emoji: '🐇', price: 20, chance: 2.5 },
