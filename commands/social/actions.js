@@ -1,6 +1,68 @@
 const { EmbedBuilder } = require('discord.js');
 const ACTIONS = require('../../data/actions');
 
+const FETCH_HEADERS = {
+  'User-Agent': 'KeoBot/1.0 (Discord Bot)',
+  Accept: 'application/json',
+};
+
+async function fetchJson(url, timeoutMs = 4500) {
+  const res = await fetch(url, {
+    headers: FETCH_HEADERS,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${url}`);
+  }
+  return res.json();
+}
+
+// API ၃ ခု (nekos.best, waifu.pics, otakugifs) ကို တစ်ပြိုင်တည်း ခေါ်ပြီး အမြန်ဆုံးရသော GIF URL ယူခြင်း
+async function fetchActionGif(actionData, commandName) {
+  const providers = [];
+
+  if (actionData.nekos !== null && actionData.nekos !== false) {
+    const nekosKey = actionData.nekos || commandName;
+    providers.push(async () => {
+      const data = await fetchJson(`https://nekos.best/api/v2/${encodeURIComponent(nekosKey)}`);
+      const url = data?.results?.[0]?.url;
+      if (!url || !url.startsWith('http')) throw new Error('Invalid nekos.best URL');
+      return url;
+    });
+  }
+
+  if (actionData.waifu !== null && actionData.waifu !== false) {
+    const waifuKey = actionData.waifu || commandName;
+    providers.push(async () => {
+      const data = await fetchJson(`https://api.waifu.pics/sfw/${encodeURIComponent(waifuKey)}`);
+      const url = data?.url;
+      if (!url || !url.startsWith('http')) throw new Error('Invalid waifu.pics URL');
+      return url;
+    });
+  }
+
+  const otakuKey = actionData.otaku || actionData.nekos || actionData.waifu || commandName;
+  if (otakuKey) {
+    providers.push(async () => {
+      const data = await fetchJson(`https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(otakuKey)}`);
+      const url = data?.url;
+      if (!url || !url.startsWith('http')) throw new Error('Invalid otakugifs URL');
+      return url;
+    });
+  }
+
+  try {
+    return await Promise.any(providers.map((fn) => fn()));
+  } catch (err) {
+    const reasons = err?.errors?.map((e) => e.message).join(' | ') || err.message;
+    console.error(`Action GIF Fetch Error (${commandName}):`, reasons);
+    if (typeof actionData.fallbackGif === 'string' && actionData.fallbackGif.startsWith('http')) {
+      return actionData.fallbackGif;
+    }
+    return null;
+  }
+}
+
 module.exports = [
   {
     names: Object.keys(ACTIONS),
@@ -20,46 +82,25 @@ module.exports = [
       const pairKey = `${commandName}_${target.id}`;
       user.actions[pairKey] = (user.actions[pairKey] || 0) + 1;
       user.markModified('actions');
-      await user.save();
+
+      // DB Save နှင့် GIF Fetch ကို တစ်ပြိုင်တည်း လုပ်ဆောင်ခြင်း
+      const [, gifUrl] = await Promise.all([
+        user.save(),
+        fetchActionGif(actionData, commandName),
+      ]);
 
       const totalCount = user.actions[pairKey];
-
-      // nekos.best နှင့် waifu.pics API များမှ Anime GIF လှမ်းယူခြင်း (5s Timeout)
-      let gifUrl = actionData.fallbackGif;
-      try {
-        let fetched = false;
-        if (actionData.nekos) {
-          const res = await fetch(`https://nekos.best/api/v2/${actionData.nekos}`, {
-            signal: AbortSignal.timeout(5000),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.results?.[0]?.url) {
-              gifUrl = data.results[0].url;
-              fetched = true;
-            }
-          }
-        }
-        if (!fetched && actionData.waifu) {
-          const res = await fetch(`https://api.waifu.pics/sfw/${actionData.waifu}`, {
-            signal: AbortSignal.timeout(5000),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.url) gifUrl = data.url;
-          }
-        }
-      } catch (apiErr) {
-        console.error('Action GIF Fetch Error:', apiErr.message || apiErr);
-      }
 
       const actionEmbed = new EmbedBuilder()
         .setColor(actionData.color)
         .setTitle(actionData.title)
         .setDescription(`**${message.author.username}** က **${target.username}** ${actionData.actionText}`)
-        .setImage(gifUrl)
         .setFooter({ text: `စုစုပေါင်း ${totalCount.toLocaleString()} ကြိမ် ${actionData.countLabel}` })
         .setTimestamp();
+
+      if (gifUrl) {
+        actionEmbed.setImage(gifUrl);
+      }
 
       return message.reply({ content: `<@${target.id}>`, embeds: [actionEmbed] });
     },
