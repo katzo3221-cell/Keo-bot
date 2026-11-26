@@ -1,66 +1,103 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const ACTIONS = require('../../data/actions');
 
-const FETCH_HEADERS = {
-  'User-Agent': 'KeoBot/1.0 (Discord Bot)',
+const API_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   Accept: 'application/json',
 };
 
-async function fetchJson(url, timeoutMs = 4500) {
-  const res = await fetch(url, {
-    headers: FETCH_HEADERS,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} from ${url}`);
+const IMG_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  Accept: 'image/gif,image/webp,image/*,*/*;q=0.8',
+};
+
+async function fetchWithTimeout(url, headers, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+async function fetchJson(url) {
+  const res = await fetchWithTimeout(url, API_HEADERS, 4500);
+  if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
   return res.json();
 }
 
-// API ၃ ခု (nekos.best, waifu.pics, otakugifs) ကို တစ်ပြိုင်တည်း ခေါ်ပြီး အမြန်ဆုံးရသော GIF URL ယူခြင်း
-async function fetchActionGif(actionData, commandName) {
-  const providers = [];
+// URL မှ GIF ဖိုင် Buffer ကို တိုက်ရိုက် Download ဆွဲပြီး Image ဟုတ်မဟုတ် စစ်ဆေးခြင်း
+async function downloadGifAsset(url) {
+  const res = await fetchWithTimeout(url, IMG_HEADERS, 6000);
+  if (!res.ok) throw new Error(`IMG HTTP ${res.status}`);
 
-  if (actionData.nekos !== null && actionData.nekos !== false) {
-    const nekosKey = actionData.nekos || commandName;
-    providers.push(async () => {
-      const data = await fetchJson(`https://nekos.best/api/v2/${encodeURIComponent(nekosKey)}`);
-      const url = data?.results?.[0]?.url;
-      if (!url || !url.startsWith('http')) throw new Error('Invalid nekos.best URL');
-      return url;
-    });
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`Not image (${contentType || 'unknown'})`);
   }
 
-  if (actionData.waifu !== null && actionData.waifu !== false) {
-    const waifuKey = actionData.waifu || commandName;
-    providers.push(async () => {
-      const data = await fetchJson(`https://api.waifu.pics/sfw/${encodeURIComponent(waifuKey)}`);
-      const url = data?.url;
-      if (!url || !url.startsWith('http')) throw new Error('Invalid waifu.pics URL');
-      return url;
-    });
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length < 100 || buffer.length > 7.5 * 1024 * 1024) {
+    throw new Error(`Invalid size (${buffer.length} bytes)`);
   }
 
-  const otakuKey = actionData.otaku || actionData.nekos || actionData.waifu || commandName;
-  if (otakuKey) {
-    providers.push(async () => {
-      const data = await fetchJson(`https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(otakuKey)}`);
-      const url = data?.url;
-      if (!url || !url.startsWith('http')) throw new Error('Invalid otakugifs URL');
-      return url;
-    });
-  }
+  let ext = 'gif';
+  if (contentType.includes('webp')) ext = 'webp';
+  else if (contentType.includes('png')) ext = 'png';
+  else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
 
-  try {
-    return await Promise.any(providers.map((fn) => fn()));
-  } catch (err) {
-    const reasons = err?.errors?.map((e) => e.message).join(' | ') || err.message;
-    console.error(`Action GIF Fetch Error (${commandName}):`, reasons);
-    if (typeof actionData.fallbackGif === 'string' && actionData.fallbackGif.startsWith('http')) {
-      return actionData.fallbackGif;
+  return { buffer, ext, url };
+}
+
+// API ၅ ခုမှ GIF URL များ စုရှာပြီး အမှန်တကယ် Download ရသော GIF ဖိုင်ကို ယူခြင်း
+async function fetchActionGifAsset(actionData, commandName) {
+  const nekosKey = actionData.nekos || commandName;
+  const waifuKey = actionData.waifu || commandName;
+  const commonKey = actionData.otaku || actionData.nekos || actionData.waifu || commandName;
+
+  const jobs = [
+    actionData.nekos !== null && actionData.nekos !== false
+      ? fetchJson(`https://nekos.best/api/v2/${encodeURIComponent(nekosKey)}`).then((d) => d?.results?.[0]?.url)
+      : Promise.reject(new Error('nekos disabled')),
+
+    actionData.waifu !== null && actionData.waifu !== false
+      ? fetchJson(`https://api.waifu.pics/sfw/${encodeURIComponent(waifuKey)}`).then((d) => d?.url)
+      : Promise.reject(new Error('waifu disabled')),
+
+    fetchJson(`https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(commonKey)}`).then((d) => d?.url),
+    fetchJson(`https://nekos.life/api/v2/img/${encodeURIComponent(commonKey)}`).then((d) => d?.url),
+    fetchJson(`https://api.purrbot.site/v2/img/sfw/${encodeURIComponent(commonKey)}/gif`).then((d) => (!d?.error ? d?.link : null)),
+  ];
+
+  const settled = await Promise.allSettled(jobs);
+  const candidateUrls = [];
+  const errors = [];
+
+  for (const r of settled) {
+    if (r.status === 'fulfilled' && typeof r.value === 'string' && r.value.startsWith('http')) {
+      candidateUrls.push(r.value);
+    } else if (r.status === 'rejected') {
+      errors.push(r.reason?.message || String(r.reason));
     }
-    return null;
   }
+
+  if (typeof actionData.fallbackGif === 'string' && actionData.fallbackGif.startsWith('http')) {
+    candidateUrls.push(actionData.fallbackGif);
+  }
+
+  // ရလာသော URL များထဲမှ တကယ် GIF Buffer ဆွဲလို့ရသည့် ပထမဆုံးတစ်ခုကို ယူမည်
+  for (const url of candidateUrls) {
+    try {
+      const asset = await downloadGifAsset(url);
+      return asset;
+    } catch (dlErr) {
+      errors.push(`DL ${url}: ${dlErr.message}`);
+    }
+  }
+
+  console.error(`Action GIF Failed (${commandName}):`, errors.join(' | '));
+  return null;
 }
 
 module.exports = [
@@ -83,10 +120,10 @@ module.exports = [
       user.actions[pairKey] = (user.actions[pairKey] || 0) + 1;
       user.markModified('actions');
 
-      // DB Save နှင့် GIF Fetch ကို တစ်ပြိုင်တည်း လုပ်ဆောင်ခြင်း
-      const [, gifUrl] = await Promise.all([
+      // DB Save နှင့် GIF Download ကို တစ်ပြိုင်တည်း လုပ်ဆောင်ခြင်း
+      const [, gifAsset] = await Promise.all([
         user.save(),
-        fetchActionGif(actionData, commandName),
+        fetchActionGifAsset(actionData, commandName),
       ]);
 
       const totalCount = user.actions[pairKey];
@@ -98,11 +135,23 @@ module.exports = [
         .setFooter({ text: `စုစုပေါင်း ${totalCount.toLocaleString()} ကြိမ် ${actionData.countLabel}` })
         .setTimestamp();
 
-      if (gifUrl) {
-        actionEmbed.setImage(gifUrl);
+      const files = [];
+      if (gifAsset) {
+        const fileName = `${commandName}.${gifAsset.ext}`;
+        files.push(new AttachmentBuilder(gifAsset.buffer, { name: fileName }));
+        actionEmbed.setImage(`attachment://${fileName}`);
       }
 
-      return message.reply({ content: `<@${target.id}>`, embeds: [actionEmbed] });
+      try {
+        return await message.reply({ content: `<@${target.id}>`, embeds: [actionEmbed], files });
+      } catch (sendErr) {
+        // Channel တွင် Attach Files ခွင့်ပြုချက်မရှိပါက URL ဖြင့် ပြန်ပို့မည်
+        if (gifAsset?.url) {
+          actionEmbed.setImage(gifAsset.url);
+          return message.reply({ content: `<@${target.id}>`, embeds: [actionEmbed] });
+        }
+        throw sendErr;
+      }
     },
   },
 ];
