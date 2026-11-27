@@ -5,7 +5,7 @@ const {
   ButtonStyle,
   MessageFlags,
 } = require('discord.js');
-const { getUser } = require('../../models/User');
+const { User } = require('../../models/User');
 const { activeGambling, validateBet } = require('../../utils/gamblingState');
 const { isOwner } = require('../../utils/helpers');
 
@@ -83,8 +83,15 @@ module.exports = [
       activeGambling.add(message.author.id);
 
       try {
-        user.balance -= bet;
-        await user.save();
+        // Atomic Update ဖြင့် လောင်းကြေးနုတ်ယူခြင်း
+        const deducted = await User.findOneAndUpdate(
+          { userId: message.author.id, balance: { $gte: bet } },
+          { $inc: { balance: -bet } }
+        );
+        if (!deducted) {
+          activeGambling.delete(message.author.id);
+          return message.reply('❌ လက်ကျန်ငွေ မလုံလောက်တော့ပါ!');
+        }
 
         const bombIndices = new Set();
         while (bombIndices.size < bombsCount) {
@@ -182,7 +189,6 @@ module.exports = [
 
         const collector = gameMsg.createMessageComponentCollector({ idle: 60000 });
         let ended = false;
-        let isProcessing = false;
 
         collector.on('collect', async (i) => {
           try {
@@ -215,15 +221,13 @@ module.exports = [
               });
             }
 
-            if (ended || isProcessing) {
+            if (ended) {
               return i.deferUpdate().catch(() => {});
             }
 
-            isProcessing = true;
-
+            // ငွေသိမ်းခြင်း (Cashout)
             if (i.customId === 'mine_cashout') {
               if (revealed.size === 0) {
-                isProcessing = false;
                 return i.reply({
                   content: '❌ အနည်းဆုံး စိန် ၁ ကွက် အရင်ဖွင့်ပါ!',
                   flags: EPHEMERAL_FLAG,
@@ -231,77 +235,77 @@ module.exports = [
               }
 
               ended = true;
-              collector.stop('cashout');
-              await i.deferUpdate();
-
               const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
               const payout = Math.floor(bet * mult);
               const profit = payout - bet;
 
-              const freshUser = await getUser(message.author.id, message.author.username);
-              freshUser.balance += payout;
-              await freshUser.save();
+              const cashoutEmbed = buildEmbed(
+                `🎉 **ငွေသိမ်းလိုက်ပါပြီ! (${mult}x)**\n💰 စုစုပေါင်း **${payout.toLocaleString()} coins** *(အမြတ်: +${profit.toLocaleString()} coins)* ရရှိပါတယ်!`,
+                '#2ECC71'
+              );
+              const finalRows = buildBoardRows(true);
 
-              return i.editReply({
-                embeds: [buildEmbed(
-                  `🎉 **ငွေသိမ်းလိုက်ပါပြီ! (${mult}x)**\n💰 စုစုပေါင်း **${payout.toLocaleString()} coins** *(အမြတ်: +${profit.toLocaleString()} coins)* ရရှိပါတယ်!`,
-                  '#2ECC71'
-                )],
-                components: buildBoardRows(true),
-              });
+              await Promise.all([
+                User.updateOne({ userId: message.author.id }, { $inc: { balance: payout } }),
+                i.update({ embeds: [cashoutEmbed], components: finalRows })
+                  .catch(() => gameMsg.edit({ embeds: [cashoutEmbed], components: finalRows }).catch(() => {})),
+              ]);
+              collector.stop('cashout');
+              return;
             }
 
             const idx = parseInt(i.customId.replace('mine_', ''), 10);
             if (isNaN(idx) || idx < 0 || idx >= totalCells || revealed.has(idx)) {
-              isProcessing = false;
               return i.deferUpdate().catch(() => {});
             }
 
-            // ၃ စက္ကန့် Timeout မဖြစ်စေရန် ချက်ချင်း deferUpdate ခေါ်ထားခြင်း
-            await i.deferUpdate();
-
+            // ဗုံးထိခြင်း
             if (bombIndices.has(idx)) {
               ended = true;
+              const bombEmbed = buildEmbed(
+                `💥 **BOOM! ဗုံးထိသွားပါပြီ!**\n💸 **-${bet.toLocaleString()} coins** ဆုံးရှုံးသွားပါတယ်။`,
+                '#E74C3C'
+              );
+              const finalRows = buildBoardRows(true, idx);
+
+              await i.update({ embeds: [bombEmbed], components: finalRows })
+                .catch(() => gameMsg.edit({ embeds: [bombEmbed], components: finalRows }).catch(() => {}));
               collector.stop('bomb');
-              return i.editReply({
-                embeds: [buildEmbed(
-                  `💥 **BOOM! ဗုံးထိသွားပါပြီ!**\n💸 **-${bet.toLocaleString()} coins** ဆုံးရှုံးသွားပါတယ်။`,
-                  '#E74C3C'
-                )],
-                components: buildBoardRows(true, idx),
-              });
+              return;
             }
 
             revealed.add(idx);
 
+            // စိန်တုံးအားလုံး ရှင်းလင်းနိုင်ခြင်း (MAX WIN)
             if (revealed.size >= safeTotal) {
               ended = true;
-              collector.stop('cleared');
               const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
               const payout = Math.floor(bet * mult);
               const profit = payout - bet;
 
-              const freshUser = await getUser(message.author.id, message.author.username);
-              freshUser.balance += payout;
-              await freshUser.save();
+              const maxEmbed = buildEmbed(
+                `🔥 **စိန်တုံးအားလုံး ရှင်းလင်းနိုင်ပါပြီ! (${mult}x MAX WIN)**\n💰 စုစုပေါင်း **${payout.toLocaleString()} coins** *(အမြတ်: +${profit.toLocaleString()} coins)* ရရှိပါတယ်!`,
+                '#FFD700'
+              );
+              const finalRows = buildBoardRows(true);
 
-              return i.editReply({
-                embeds: [buildEmbed(
-                  `🔥 **စိန်တုံးအားလုံး ရှင်းလင်းနိုင်ပါပြီ! (${mult}x MAX WIN)**\n💰 စုစုပေါင်း **${payout.toLocaleString()} coins** *(အမြတ်: +${profit.toLocaleString()} coins)* ရရှိပါတယ်!`,
-                  '#FFD700'
-                )],
-                components: buildBoardRows(true),
-              });
+              await Promise.all([
+                User.updateOne({ userId: message.author.id }, { $inc: { balance: payout } }),
+                i.update({ embeds: [maxEmbed], components: finalRows })
+                  .catch(() => gameMsg.edit({ embeds: [maxEmbed], components: finalRows }).catch(() => {})),
+              ]);
+              collector.stop('cleared');
+              return;
             }
 
-            return i.editReply({
-              embeds: [buildEmbed('✨ စိန်တုံး 💎 တွေ့ပါပြီ! ဆက်ဖွင့်မလား၊ ငွေသိမ်းမလား ရွေးချယ်ပါ။')],
-              components: buildBoardRows(false),
-            });
+            // ပုံမှန် စိန်တုံးဖွင့်ခြင်း (API ၁ ခါတည်းဖြင့် ချက်ချင်းပြ)
+            const nextEmbed = buildEmbed('✨ စိန်တုံး 💎 တွေ့ပါပြီ! ဆက်ဖွင့်မလား၊ ငွေသိမ်းမလား ရွေးချယ်ပါ။');
+            const nextRows = buildBoardRows(false);
+
+            await i.update({ embeds: [nextEmbed], components: nextRows })
+              .catch(() => gameMsg.edit({ embeds: [nextEmbed], components: nextRows }).catch(() => {}));
           } catch (err) {
             console.error('Mines Collect Error:', err);
-          } finally {
-            isProcessing = false;
           }
         });
 
@@ -310,12 +314,13 @@ module.exports = [
             if (ended) return;
             ended = true;
 
-            const freshUser = await getUser(message.author.id, message.author.username);
             if (revealed.size > 0) {
               const mult = calcMinesMultiplier(revealed.size, bombsCount, totalCells);
               const payout = Math.floor(bet * mult);
-              freshUser.balance += payout;
-              await freshUser.save();
+              await User.updateOne(
+                { userId: message.author.id },
+                { $inc: { balance: payout } }
+              );
 
               await gameMsg.edit({
                 embeds: [buildEmbed(
@@ -325,8 +330,10 @@ module.exports = [
                 components: buildBoardRows(true),
               }).catch(() => {});
             } else {
-              freshUser.balance += bet;
-              await freshUser.save();
+              await User.updateOne(
+                { userId: message.author.id },
+                { $inc: { balance: bet } }
+              );
 
               await gameMsg.edit({
                 embeds: [buildEmbed(
