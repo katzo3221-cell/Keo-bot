@@ -1,7 +1,29 @@
 const MAX_BET = 250000;
+const LOCK_TTL_MS = 2 * 60 * 1000; // ၂ မိနစ်ကျော်ပြီး ကျန်နေသော Lock များကို အလိုအလျောက် ဖြုတ်ပေးမည်
 
-// တစ်ချိန်တည်း လောင်းကစားပွဲ ထပ်မဆော့နိုင်ရန် ထိန်းချုပ်မည့် Set
-const activeGambling = new Set();
+// တစ်ချိန်တည်း လောင်းကစားပွဲ ထပ်မဆော့နိုင်ရန် ထိန်းချုပ်မည့် Auto-Expire Lock
+const lockStore = new Map();
+const activeGambling = {
+  has(userId) {
+    const expiresAt = lockStore.get(userId);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      lockStore.delete(userId);
+      return false;
+    }
+    return true;
+  },
+  add(userId, ttlMs = LOCK_TTL_MS) {
+    lockStore.set(userId, Date.now() + ttlMs);
+    return this;
+  },
+  delete(userId) {
+    return lockStore.delete(userId);
+  },
+  clear() {
+    lockStore.clear();
+  },
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
